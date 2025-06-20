@@ -1,0 +1,41 @@
+# 构建产物
+build/
+hackmitm
+*.exe
+
+# 证书文件
+certs/*.pem
+
+# 测试文件
+coverage.out
+coverage.html
+
+# IDE 文件
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 日志文件
+*.log
+
+# 临时文件
+tmp/
+temp/
+
+# Git 文件
+.git/
+.gitignore
+
+# 文档（已复制到镜像中）
+README.md
+
+# Docker 文件
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# 开发工具配置
+.air.toml
+Makefile 

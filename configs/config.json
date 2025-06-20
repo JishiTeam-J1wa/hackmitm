@@ -1,0 +1,34 @@
+{
+  "server": {
+    "listen_port": 8080,
+    "listen_addr": "0.0.0.0",
+    "read_timeout": "30s",
+    "write_timeout": "30s"
+  },
+  "tls": {
+    "cert_dir": "./certs",
+    "ca_key_file": "./certs/ca-key.pem",
+    "ca_cert_file": "./certs/ca-cert.pem",
+    "enable_cert_cache": true,
+    "cert_cache_ttl": "24h"
+  },
+  "proxy": {
+    "enable_http": true,
+    "enable_https": true,
+    "upstream_timeout": "30s",
+    "max_idle_conns": 100,
+    "enable_compression": true
+  },
+  "logging": {
+    "level": "info",
+    "output": "stdout",
+    "format": "text",
+    "enable_file_rotation": false
+  },
+  "performance": {
+    "max_goroutines": 10000,
+    "buffer_size": 4096,
+    "enable_pprof": false,
+    "pprof_port": 6060
+  }
+} 

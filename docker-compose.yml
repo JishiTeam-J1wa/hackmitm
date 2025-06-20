@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  hackmitm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hackmitm
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "6060:6060"  # pprof 端口（可选）
+    volumes:
+      - ./certs:/app/certs
+      - ./configs:/app/configs:ro
+      - ./logs:/app/logs
+    environment:
+      - HACKMITM_CONFIG=/app/configs/config.json
+      - HACKMITM_CERT_DIR=/app/certs
+      - HACKMITM_LOG_LEVEL=info
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "--proxy=on", "--proxy-user=", "--proxy-password=", "http://localhost:8080", "http://httpbin.org/status/200"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - hackmitm-network
+    # 安全配置
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/tmp
+
+  # 可选：添加监控服务
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: hackmitm-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - hackmitm-network
+    depends_on:
+      - hackmitm
+    profiles:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: hackmitm-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    networks:
+      - hackmitm-network
+    depends_on:
+      - prometheus
+    profiles:
+      - monitoring
+
+networks:
+  hackmitm-network:
+    driver: bridge
+
+volumes:
+  prometheus-data:
+  grafana-data: 
