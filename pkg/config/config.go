@@ -5,7 +5,6 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"sync"
 	"time"
@@ -22,6 +21,12 @@ type Config struct {
 	TLS TLSConfig `json:"tls"`
 	// Proxy 代理配置
 	Proxy ProxyConfig `json:"proxy"`
+	// Security 安全配置
+	Security SecurityConfig `json:"security"`
+	// Monitoring 监控配置
+	Monitoring MonitoringConfig `json:"monitoring"`
+	// Plugins 插件配置
+	Plugins PluginsConfig `json:"plugins"`
 	// Logging 日志配置
 	Logging LoggingConfig `json:"logging"`
 	// Performance 性能配置
@@ -68,12 +73,62 @@ type ProxyConfig struct {
 	EnableHTTP bool `json:"enable_http"`
 	// EnableHTTPS 启用HTTPS代理
 	EnableHTTPS bool `json:"enable_https"`
+	// EnableWebSocket 启用WebSocket代理
+	EnableWebSocket bool `json:"enable_websocket"`
 	// UpstreamTimeout 上游超时时间
 	UpstreamTimeout time.Duration `json:"upstream_timeout"`
 	// MaxIdleConns 最大空闲连接数
 	MaxIdleConns int `json:"max_idle_conns"`
 	// EnableCompression 启用压缩
 	EnableCompression bool `json:"enable_compression"`
+}
+
+// SecurityConfig 安全配置
+// SecurityConfig security configuration
+type SecurityConfig struct {
+	// EnableAuth 启用认证
+	EnableAuth bool `json:"enable_auth"`
+	// Username 用户名
+	Username string `json:"username"`
+	// Password 密码
+	Password string `json:"password"`
+	// Whitelist IP白名单
+	Whitelist []string `json:"whitelist"`
+	// Blacklist IP黑名单
+	Blacklist []string `json:"blacklist"`
+	// RateLimit 限流配置
+	RateLimit RateLimitConfig `json:"rate_limit"`
+}
+
+// RateLimitConfig 限流配置
+// RateLimitConfig rate limit configuration
+type RateLimitConfig struct {
+	// Enabled 启用限流
+	Enabled bool `json:"enabled"`
+	// MaxRequests 最大请求数
+	MaxRequests int `json:"max_requests"`
+	// Window 时间窗口
+	Window time.Duration `json:"window"`
+}
+
+// MonitoringConfig 监控配置
+// MonitoringConfig monitoring configuration
+type MonitoringConfig struct {
+	// Enabled 启用监控
+	Enabled bool `json:"enabled"`
+	// Port 监控端口
+	Port int `json:"port"`
+	// HealthChecks 健康检查配置
+	HealthChecks HealthCheckConfig `json:"health_checks"`
+}
+
+// HealthCheckConfig 健康检查配置
+// HealthCheckConfig health check configuration
+type HealthCheckConfig struct {
+	// MemoryLimitMB 内存限制（MB）
+	MemoryLimitMB int `json:"memory_limit_mb"`
+	// MaxGoroutines 最大Goroutine数
+	MaxGoroutines int `json:"max_goroutines"`
 }
 
 // LoggingConfig 日志配置
@@ -100,6 +155,33 @@ type PerformanceConfig struct {
 	EnablePProf bool `json:"enable_pprof"`
 	// PProfPort 性能分析端口
 	PProfPort int `json:"pprof_port"`
+}
+
+// PluginsConfig 插件配置
+// PluginsConfig plugins configuration
+type PluginsConfig struct {
+	// Enabled 启用插件系统
+	Enabled bool `json:"enabled"`
+	// BasePath 插件基础路径
+	BasePath string `json:"base_path"`
+	// AutoLoad 自动加载插件
+	AutoLoad bool `json:"auto_load"`
+	// Plugins 插件列表
+	Plugins []ConfigPluginConfig `json:"plugins"`
+}
+
+// ConfigPluginConfig 插件配置
+type ConfigPluginConfig struct {
+	// Name 插件名称
+	Name string `json:"name"`
+	// Enabled 是否启用
+	Enabled bool `json:"enabled"`
+	// Path 插件路径
+	Path string `json:"path"`
+	// Priority 优先级
+	Priority int `json:"priority"`
+	// Config 插件配置
+	Config map[string]interface{} `json:"config"`
 }
 
 var (
@@ -133,9 +215,59 @@ func getDefaultConfig() *Config {
 		Proxy: ProxyConfig{
 			EnableHTTP:        true,
 			EnableHTTPS:       true,
+			EnableWebSocket:   true,
 			UpstreamTimeout:   30 * time.Second,
 			MaxIdleConns:      100,
 			EnableCompression: true,
+		},
+		Security: SecurityConfig{
+			EnableAuth: false,
+			Username:   "",
+			Password:   "",
+			Whitelist:  []string{},
+			Blacklist:  []string{},
+			RateLimit: RateLimitConfig{
+				Enabled:     true,
+				MaxRequests: 100,
+				Window:      time.Minute,
+			},
+		},
+		Monitoring: MonitoringConfig{
+			Enabled: true,
+			Port:    9090,
+			HealthChecks: HealthCheckConfig{
+				MemoryLimitMB: 512,
+				MaxGoroutines: 10000,
+			},
+		},
+		Plugins: PluginsConfig{
+			Enabled:  true,
+			BasePath: "./plugins",
+			AutoLoad: true,
+			Plugins: []ConfigPluginConfig{
+				{
+					Name:     "request-logger",
+					Enabled:  false,
+					Path:     "examples/request_logger.so",
+					Priority: 100,
+					Config: map[string]interface{}{
+						"enable_debug": false,
+						"log_format":   "detailed",
+						"log_file":     "./logs/requests.log",
+					},
+				},
+				{
+					Name:     "traffic-stats",
+					Enabled:  true,
+					Path:     "examples/traffic_stats.so",
+					Priority: 1000,
+					Config: map[string]interface{}{
+						"enable_window_stats": true,
+						"window_duration":     "1m",
+						"max_window_count":    60,
+					},
+				},
+			},
 		},
 		Logging: LoggingConfig{
 			Level:              "info",
@@ -163,7 +295,7 @@ func LoadConfig(filePath string) (*Config, error) {
 		return config, nil
 	}
 
-	data, err := ioutil.ReadFile(filePath)
+	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("读取配置文件失败: %w", err)
 	}
@@ -196,7 +328,7 @@ func (c *Config) SaveConfig() error {
 		return fmt.Errorf("序列化配置失败: %w", err)
 	}
 
-	if err := ioutil.WriteFile(c.filePath, data, 0644); err != nil {
+	if err := os.WriteFile(c.filePath, data, 0644); err != nil {
 		return fmt.Errorf("写入配置文件失败: %w", err)
 	}
 
@@ -257,6 +389,30 @@ func (c *Config) GetProxy() ProxyConfig {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.Proxy
+}
+
+// GetSecurity 获取安全配置
+// GetSecurity returns security configuration
+func (c *Config) GetSecurity() SecurityConfig {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.Security
+}
+
+// GetMonitoring 获取监控配置
+// GetMonitoring returns monitoring configuration
+func (c *Config) GetMonitoring() MonitoringConfig {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.Monitoring
+}
+
+// GetPlugins 获取插件配置
+// GetPlugins returns plugins configuration
+func (c *Config) GetPlugins() PluginsConfig {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.Plugins
 }
 
 // GetLogging 获取日志配置

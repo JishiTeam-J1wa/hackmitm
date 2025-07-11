@@ -1,122 +1,40 @@
-# 构建产物
-build/
-dist/
-hackmitm
-hackmitm.exe
+# 编译生成的文件
 *.exe
+*.exe~
 *.dll
 *.so
 *.dylib
+hackmitm
 
-# 测试覆盖率
-coverage.out
-coverage.html
-*.test
+# 测试生成的证书
+/certs/*.pem
+/ca.crt
 
 # 日志文件
+/logs/*
 *.log
-logs/
 
-# 证书文件（敏感信息）
-certs/*.pem
-certs/*.key
-certs/*.crt
-certs/*.p12
-
-# 配置文件中的敏感信息
-configs/production.json
-configs/staging.json
-configs/*-secret.json
-
-# 开发环境
-.env
-.env.local
-.env.development
-.env.test
-.env.production
-
-# IDE 文件
-.vscode/
+# IDE和编辑器文件
 .idea/
+.vscode/
 *.swp
 *.swo
 *~
+
+# 操作系统文件
 .DS_Store
 Thumbs.db
 
+# 依赖目录
+/vendor/
+/dist/
+
 # 临时文件
-tmp/
-temp/
-cache/
-
-# 依赖
-vendor/
-
-# Go 特定
-# 如果你有 vendor 目录，取消注释下面的行
-# vendor/
-
-# 性能分析文件
-*.prof
-*.pprof
-
-# 内存转储
-*.mem
-
-# 调试信息
-debug
-debug.test
-
-# 空气配置文件
-.air.toml
-
-# 备份文件
+*.tmp
+*.temp
 *.bak
-*.backup
-*.orig
 
-# 压缩文件
-*.tar.gz
-*.zip
-*.rar
-
-# 监控和度量数据
-prometheus/
-grafana/data/
-
-# Docker 数据
-docker-data/
-
-# 本地开发数据库
-*.db
-*.sqlite
-*.sqlite3
-
-# 编辑器配置（可选，根据团队约定）
-.editorconfig
-
-# 操作系统生成的文件
-.DS_Store?
-ehthumbs.db
-Icon?
-Thumbs.db
-
-# 个人配置文件
-.personal.json
-.local.json
-
-# 运行时生成的文件
-pid
-*.pid
-*.seed
-
-# 文档生成文件
-docs/api/
-docs/build/
-
-# 安全扫描报告
-security-report.*
-
-# 性能测试结果
-benchmark.*
-perf.* 
+# 调试文件
+debug
+*.debug
+debug.test 

@@ -1,26 +1,53 @@
 {
   "server": {
-    "listen_port": 8080,
+    "listen_port": 8081,
     "listen_addr": "0.0.0.0",
-    "read_timeout": "30s",
-    "write_timeout": "30s"
+    "read_timeout": 30000000000,
+    "write_timeout": 30000000000
   },
   "tls": {
     "cert_dir": "./certs",
     "ca_key_file": "./certs/ca-key.pem",
     "ca_cert_file": "./certs/ca-cert.pem",
     "enable_cert_cache": true,
-    "cert_cache_ttl": "24h"
+    "cert_cache_ttl": 86400000000000
   },
   "proxy": {
     "enable_http": true,
     "enable_https": true,
-    "upstream_timeout": "30s",
+    "enable_websocket": true,
+    "upstream_timeout": 30000000000,
     "max_idle_conns": 100,
     "enable_compression": true
   },
+  "security": {
+    "enable_auth": false,
+    "username": "",
+    "password": "",
+    "whitelist": [],
+    "blacklist": [],
+    "rate_limit": {
+      "enabled": true,
+      "max_requests": 100,
+      "window": 60000000000
+    }
+  },
+  "monitoring": {
+    "enabled": true,
+    "port": 9090,
+    "health_checks": {
+      "memory_limit_mb": 512,
+      "max_goroutines": 10000
+    }
+  },
+  "plugins": {
+    "enabled": false,
+    "base_path": "./plugins",
+    "auto_load": true,
+    "plugins": []
+  },
   "logging": {
-    "level": "info",
+    "level": "debug",
     "output": "stdout",
     "format": "text",
     "enable_file_rotation": false

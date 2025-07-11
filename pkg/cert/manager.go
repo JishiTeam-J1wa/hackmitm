@@ -29,7 +29,7 @@ type CertManager struct {
 	// caCert CA证书
 	caCert *x509.Certificate
 	// certCache 证书缓存
-	certCache map[string]*tls.Certificate
+	certCache map[string]*cacheCert
 	// cacheMutex 缓存锁
 	cacheMutex sync.RWMutex
 	// certDir 证书存储目录
@@ -38,6 +38,16 @@ type CertManager struct {
 	enableCache bool
 	// cacheTTL 缓存TTL
 	cacheTTL time.Duration
+	// cleanupTicker 清理定时器
+	cleanupTicker *time.Ticker
+	// stopCleanup 停止清理
+	stopCleanup chan bool
+}
+
+// cacheCert 缓存的证书
+type cacheCert struct {
+	cert      *tls.Certificate
+	createdAt time.Time
 }
 
 // CertOptions 证书选项
@@ -67,10 +77,11 @@ func NewCertManager(opts CertOptions) (*CertManager, error) {
 	}
 
 	cm := &CertManager{
-		certCache:   make(map[string]*tls.Certificate),
+		certCache:   make(map[string]*cacheCert),
 		certDir:     opts.CertDir,
 		enableCache: opts.EnableCache,
 		cacheTTL:    opts.CacheTTL,
+		stopCleanup: make(chan bool),
 	}
 
 	// 初始化CA证书
@@ -78,8 +89,50 @@ func NewCertManager(opts CertOptions) (*CertManager, error) {
 		return nil, fmt.Errorf("初始化CA证书失败: %w", err)
 	}
 
+	// 启动缓存清理
+	if cm.enableCache {
+		cm.startCleanup()
+	}
+
 	logger.Info("证书管理器初始化成功")
 	return cm, nil
+}
+
+// startCleanup 启动缓存清理
+func (cm *CertManager) startCleanup() {
+	cm.cleanupTicker = time.NewTicker(cm.cacheTTL / 4) // 每1/4 TTL清理一次
+	go func() {
+		for {
+			select {
+			case <-cm.cleanupTicker.C:
+				cm.cleanExpiredCerts()
+			case <-cm.stopCleanup:
+				return
+			}
+		}
+	}()
+}
+
+// cleanExpiredCerts 清理过期证书
+func (cm *CertManager) cleanExpiredCerts() {
+	cm.cacheMutex.Lock()
+	defer cm.cacheMutex.Unlock()
+
+	now := time.Now()
+	for domain, cert := range cm.certCache {
+		if now.Sub(cert.createdAt) > cm.cacheTTL {
+			delete(cm.certCache, domain)
+			logger.Debugf("清理过期证书: %s", domain)
+		}
+	}
+}
+
+// Stop 停止证书管理器
+func (cm *CertManager) Stop() {
+	if cm.cleanupTicker != nil {
+		cm.cleanupTicker.Stop()
+		close(cm.stopCleanup)
+	}
 }
 
 // initCA 初始化CA证书
@@ -219,9 +272,12 @@ func (cm *CertManager) GetCertificate(domain string) (*tls.Certificate, error) {
 	// 检查缓存
 	if cm.enableCache {
 		cm.cacheMutex.RLock()
-		if cert, exists := cm.certCache[domain]; exists {
-			cm.cacheMutex.RUnlock()
-			return cert, nil
+		if cached, exists := cm.certCache[domain]; exists {
+			// 检查是否过期
+			if time.Since(cached.createdAt) < cm.cacheTTL {
+				cm.cacheMutex.RUnlock()
+				return cached.cert, nil
+			}
 		}
 		cm.cacheMutex.RUnlock()
 	}
@@ -235,16 +291,11 @@ func (cm *CertManager) GetCertificate(domain string) (*tls.Certificate, error) {
 	// 添加到缓存
 	if cm.enableCache {
 		cm.cacheMutex.Lock()
-		cm.certCache[domain] = cert
+		cm.certCache[domain] = &cacheCert{
+			cert:      cert,
+			createdAt: time.Now(),
+		}
 		cm.cacheMutex.Unlock()
-
-		// 设置过期清理
-		go func() {
-			time.Sleep(cm.cacheTTL)
-			cm.cacheMutex.Lock()
-			delete(cm.certCache, domain)
-			cm.cacheMutex.Unlock()
-		}()
 	}
 
 	return cert, nil
