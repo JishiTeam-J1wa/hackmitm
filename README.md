@@ -716,13 +716,15 @@ go mod tidy
 make build
 # 构建完成: ./build/hackmitm
 
+# 构建插件 (源代码目录下可构建)
+make plugins
+
 # 方式一：快速启动 (禁用插件)
 ./build/hackmitm -config configs/config-no-plugins.json
 
 # 方式二：完整功能 (需要先构建插件)
 make plugins  # 构建插件
 ./build/hackmitm -config configs/config.json
-
 # 验证服务状态
 curl http://localhost:9090/health
 ```
