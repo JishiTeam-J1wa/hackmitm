@@ -54,18 +54,37 @@ sudo chmod +x /usr/local/bin/hackmitm
 
 ### 首次启动
 
-1. **启动服务**：
-   ```bash
-   hackmitm
-   ```
+#### 方式一：快速启动（推荐新手）
 
-2. **访问管理界面**：
+```bash
+# 禁用插件启动，避免插件依赖问题
+./build/hackmitm -config configs/config-no-plugins.json
+```
+
+#### 方式二：完整功能启动
+
+```bash
+# 先构建插件
+make plugins
+
+# 启用插件启动
+./build/hackmitm -config configs/config.json
+```
+
+#### 启动后操作
+
+1. **访问管理界面**：
    - 代理端口: `http://localhost:8081`
    - 监控面板: `http://localhost:9090`
 
-3. **配置浏览器代理**：
+2. **配置浏览器代理**：
    - HTTP代理: `127.0.0.1:8081`
    - HTTPS代理: `127.0.0.1:8081`
+
+3. **验证服务状态**：
+   ```bash
+   curl http://localhost:9090/health
+   ```
 
 ## ⚙️ 基础配置
 

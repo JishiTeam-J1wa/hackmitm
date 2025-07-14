@@ -175,14 +175,30 @@ go mod tidy
 make build
 # 构建完成: ./build/hackmitm
 
-# 构建插件 (可选)
-make plugins
+# 方式一：快速启动 (禁用插件)
+./build/hackmitm -config configs/config-no-plugins.json
 
-# 启动服务
+# 方式二：完整功能 (需要先构建插件)
+make plugins  # 构建插件
 ./build/hackmitm -config configs/config.json
 
 # 验证服务状态
 curl http://localhost:9090/health
+```
+
+### 📋 启动方式说明
+
+| 启动方式 | 配置文件 | 插件支持 | 适用场景 |
+|---------|---------|---------|---------|
+| **快速启动** | `config-no-plugins.json` | ❌ 禁用 | 基础代理功能，快速测试 |
+| **完整功能** | `config.json` | ✅ 启用 | 完整功能，生产环境 |
+
+**插件功能包括**：
+- 🔍 请求日志记录
+- 🛡️ 安全检测防护  
+- 📊 统计分析
+- 🎯 自定义扩展
+
 ```
 
 ### 🎯 Docker 部署

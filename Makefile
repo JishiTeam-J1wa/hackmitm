@@ -113,6 +113,18 @@ docker-stop: ## 停止 Docker 容器
 	docker stop $(DOCKER_IMAGE) || true
 	docker rm $(DOCKER_IMAGE) || true
 
+# 插件
+.PHONY: plugins
+plugins: ## 构建所有插件
+	@echo "构建插件..."
+	cd plugins && $(MAKE) examples
+	@echo "插件构建完成"
+
+.PHONY: clean-plugins
+clean-plugins: ## 清理插件文件
+	cd plugins && $(MAKE) clean
+	@echo "插件文件已清理"
+
 # 清理
 .PHONY: clean
 clean: ## 清理构建文件
@@ -136,9 +148,13 @@ release: clean build-all ## 构建发布版本
 			platform=$$(basename $$binary | sed 's/$(BINARY_NAME)-//'); \
 			mkdir -p $(BUILD_DIR)/release/$(BINARY_NAME)-$$platform; \
 			cp $$binary $(BUILD_DIR)/release/$(BINARY_NAME)-$$platform/$(BINARY_NAME); \
-			cp README.md $(BUILD_DIR)/release/$(BINARY_NAME)-$$platform/; \
+			cp README.md LICENSE start.sh start.bat $(BUILD_DIR)/release/$(BINARY_NAME)-$$platform/; \
 			cp -r configs $(BUILD_DIR)/release/$(BINARY_NAME)-$$platform/; \
 			cp -r docs $(BUILD_DIR)/release/$(BINARY_NAME)-$$platform/; \
+			cp -r plugins $(BUILD_DIR)/release/$(BINARY_NAME)-$$platform/; \
+			cp -r images $(BUILD_DIR)/release/$(BINARY_NAME)-$$platform/; \
+			mkdir -p $(BUILD_DIR)/release/$(BINARY_NAME)-$$platform/logs; \
+			echo "logs/" > $(BUILD_DIR)/release/$(BINARY_NAME)-$$platform/logs/.gitkeep; \
 			cd $(BUILD_DIR)/release && tar -czf $(BINARY_NAME)-$$platform.tar.gz $(BINARY_NAME)-$$platform; \
 			cd - > /dev/null; \
 			rm -rf $(BUILD_DIR)/release/$(BINARY_NAME)-$$platform; \
