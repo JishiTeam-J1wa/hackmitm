@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"hackmitm/pkg/config"
 	"hackmitm/pkg/logger"
 )
 
@@ -47,6 +48,8 @@ type RateLimiter struct {
 	maxRequests int
 	// window 时间窗口
 	window time.Duration
+	// enabled 是否启用限流
+	enabled bool
 	// mutex 保护并发访问
 	mutex sync.RWMutex
 	// cleanup 清理定时器
@@ -62,19 +65,41 @@ type ClientRecord struct {
 }
 
 // NewAccessController 创建访问控制器
-func NewAccessController() *AccessController {
+func NewAccessController(securityConfig config.SecurityConfig) *AccessController {
 	ac := &AccessController{
 		whitelist: make(map[string]bool),
 		blacklist: make(map[string]bool),
 		rateLimiter: &RateLimiter{
 			clients:     make(map[string]*ClientRecord),
-			maxRequests: 100, // 默认每分钟100请求
-			window:      time.Minute,
+			maxRequests: securityConfig.RateLimit.MaxRequests,
+			window:      securityConfig.RateLimit.Window,
+			enabled:     securityConfig.RateLimit.Enabled,
 		},
 	}
 
-	// 启动限流器清理
-	ac.rateLimiter.startCleanup()
+	// 设置白名单
+	for _, ip := range securityConfig.Whitelist {
+		ac.whitelist[ip] = true
+	}
+
+	// 设置黑名单
+	for _, ip := range securityConfig.Blacklist {
+		ac.blacklist[ip] = true
+	}
+
+	// 设置认证
+	if securityConfig.EnableAuth {
+		ac.SetAuth(securityConfig.Username, securityConfig.Password)
+	}
+
+	// 启动限流器清理（只有在启用限流时才启动）
+	if ac.rateLimiter.enabled {
+		ac.rateLimiter.startCleanup()
+		logger.Infof("限流器已启用: %d请求/%s", ac.rateLimiter.maxRequests, ac.rateLimiter.window)
+	} else {
+		logger.Info("限流器已禁用")
+	}
+
 	return ac
 }
 
@@ -220,6 +245,11 @@ func (rl *RateLimiter) startCleanup() {
 
 // checkRate 检查限流
 func (rl *RateLimiter) checkRate(clientIP string) error {
+	// 如果限流未启用，直接返回
+	if !rl.enabled {
+		return nil
+	}
+
 	rl.mutex.Lock()
 	defer rl.mutex.Unlock()
 
@@ -283,11 +313,94 @@ func (ac *AccessController) GetStats() map[string]interface{} {
 	ac.rateLimiter.mutex.RLock()
 	defer ac.rateLimiter.mutex.RUnlock()
 
-	return map[string]interface{}{
-		"whitelist_size": len(ac.whitelist),
-		"blacklist_size": len(ac.blacklist),
-		"auth_enabled":   ac.auth != nil && ac.auth.Enabled,
-		"active_clients": len(ac.rateLimiter.clients),
-		"rate_limit":     fmt.Sprintf("%d/%s", ac.rateLimiter.maxRequests, ac.rateLimiter.window),
+	stats := map[string]interface{}{
+		"whitelist_size":     len(ac.whitelist),
+		"blacklist_size":     len(ac.blacklist),
+		"auth_enabled":       ac.auth != nil && ac.auth.Enabled,
+		"rate_limit_enabled": ac.rateLimiter.enabled,
+		"active_clients":     len(ac.rateLimiter.clients),
 	}
+
+	if ac.rateLimiter.enabled {
+		stats["rate_limit"] = fmt.Sprintf("%d/%s", ac.rateLimiter.maxRequests, ac.rateLimiter.window)
+	} else {
+		stats["rate_limit"] = "disabled"
+	}
+
+	return stats
+}
+
+// UpdateConfig 更新配置
+func (ac *AccessController) UpdateConfig(securityConfig config.SecurityConfig) {
+	ac.mutex.Lock()
+	defer ac.mutex.Unlock()
+
+	// 更新白名单
+	ac.whitelist = make(map[string]bool)
+	for _, ip := range securityConfig.Whitelist {
+		ac.whitelist[ip] = true
+	}
+
+	// 更新黑名单
+	ac.blacklist = make(map[string]bool)
+	for _, ip := range securityConfig.Blacklist {
+		ac.blacklist[ip] = true
+	}
+
+	// 更新认证
+	if securityConfig.EnableAuth {
+		ac.SetAuthWithoutLock(securityConfig.Username, securityConfig.Password)
+	} else {
+		ac.auth = nil
+	}
+
+	// 更新限流配置
+	ac.rateLimiter.mutex.Lock()
+	oldEnabled := ac.rateLimiter.enabled
+	ac.rateLimiter.enabled = securityConfig.RateLimit.Enabled
+	ac.rateLimiter.maxRequests = securityConfig.RateLimit.MaxRequests
+	ac.rateLimiter.window = securityConfig.RateLimit.Window
+
+	// 如果限流状态发生变化
+	if !oldEnabled && ac.rateLimiter.enabled {
+		// 从禁用变为启用，启动清理任务
+		ac.rateLimiter.startCleanupWithoutLock()
+		logger.Infof("限流器已启用: %d请求/%s", ac.rateLimiter.maxRequests, ac.rateLimiter.window)
+	} else if oldEnabled && !ac.rateLimiter.enabled {
+		// 从启用变为禁用，停止清理任务
+		if ac.rateLimiter.cleanup != nil {
+			ac.rateLimiter.cleanup.Stop()
+			ac.rateLimiter.cleanup = nil
+		}
+		logger.Info("限流器已禁用")
+	} else if ac.rateLimiter.enabled {
+		// 仍然启用，只是更新参数
+		logger.Infof("限流器配置已更新: %d请求/%s", ac.rateLimiter.maxRequests, ac.rateLimiter.window)
+	}
+	ac.rateLimiter.mutex.Unlock()
+
+	logger.Info("访问控制配置已更新")
+}
+
+// SetAuthWithoutLock 设置认证（不加锁版本，用于内部调用）
+func (ac *AccessController) SetAuthWithoutLock(username, password string) {
+	hash := sha256.Sum256([]byte(password))
+	ac.auth = &AuthConfig{
+		Username:     username,
+		PasswordHash: hash[:],
+		Enabled:      true,
+	}
+}
+
+// startCleanupWithoutLock 启动清理任务（不加锁版本）
+func (rl *RateLimiter) startCleanupWithoutLock() {
+	if rl.cleanup != nil {
+		rl.cleanup.Stop()
+	}
+	rl.cleanup = time.NewTicker(5 * time.Minute)
+	go func() {
+		for range rl.cleanup.C {
+			rl.cleanupOldRecords()
+		}
+	}()
 }

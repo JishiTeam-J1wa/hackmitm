@@ -18,17 +18,17 @@
     "enable_websocket": true,
     "upstream_timeout": 30000000000,
     "max_idle_conns": 100,
-    "enable_compression": true
+    "enable_compression": false
   },
   "security": {
     "enable_auth": false,
     "username": "admin",
-    "password": "password",
+    "password": "your_secure_password_here",
     "whitelist": [],
     "blacklist": [],
     "rate_limit": {
       "enabled": true,
-      "max_requests": 100,
+      "max_requests": 1000,
       "window": 60000000000
     }
   },
@@ -117,5 +117,20 @@
     "buffer_size": 4096,
     "enable_pprof": false,
     "pprof_port": 6060
+  },
+  "pattern_recognition": {
+    "enabled": true,
+    "confidence_threshold": 0.6,
+    "cache_size": 1000,
+    "cache_ttl": 300
+  },
+  "fingerprint": {
+    "enabled": true,
+    "fingerprint_path": "configs/finger.json",
+    "cache_size": 2000,
+    "cache_ttl": 1800,
+    "favicon_timeout": 10,
+    "use_layered_index": true,
+    "max_matches": 10
   }
 } 

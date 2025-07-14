@@ -17,8 +17,10 @@ import (
 
 	"hackmitm/pkg/cert"
 	"hackmitm/pkg/config"
+	"hackmitm/pkg/fingerprint"
 	"hackmitm/pkg/logger"
 	"hackmitm/pkg/plugin"
+	"hackmitm/pkg/pool"
 	"hackmitm/pkg/security"
 	"hackmitm/pkg/traffic"
 )
@@ -32,6 +34,10 @@ type Server struct {
 	certManager *cert.CertManager
 	// processor 流量处理器
 	processor *traffic.Processor
+	// patternHandler 流量模式识别处理器
+	patternHandler *traffic.PatternHandler
+	// fingerprintHandler 指纹识别处理器
+	fingerprintHandler *fingerprint.FingerprintHandler
 	// accessController 访问控制器
 	accessController *security.AccessController
 	// pluginManager 插件管理器
@@ -40,8 +46,8 @@ type Server struct {
 	httpServer *http.Server
 	// client HTTP客户端
 	client *http.Client
-	// connPool 连接池
-	connPool sync.Pool
+	// bufferPool 高效内存池
+	bufferPool *pool.BufferPool
 	// activeConns 活跃连接数
 	activeConns int64
 	// totalRequests 总请求数
@@ -67,17 +73,50 @@ func NewServer(cfg *config.Config, certMgr *cert.CertManager) (*Server, error) {
 		MaxBodySize:        10 * 1024 * 1024, // 10MB
 	})
 
+	// 创建访问控制器
+	accessController := security.NewAccessController(cfg.GetSecurity())
+
+	// 创建流量模式识别处理器
+	patternHandler := traffic.NewPatternHandler()
+
+	// 配置流量模式识别
+	patternConfig := cfg.GetPatternRecognition()
+	patternHandler.SetEnabled(patternConfig.Enabled)
+	if patternConfig.ConfidenceThreshold > 0 {
+		patternHandler.GetRecognizer().SetConfidenceThreshold(patternConfig.ConfidenceThreshold)
+	}
+	if patternConfig.CacheSize > 0 && patternConfig.CacheTTL > 0 {
+		patternHandler.SetCacheConfig(patternConfig.CacheSize, time.Duration(patternConfig.CacheTTL)*time.Second)
+	}
+
+	// 创建指纹识别处理器
+	log := logger.NewLogger()
+	fingerprintHandler := fingerprint.NewFingerprintHandler(log.Logger)
+
+	// 配置指纹识别
+	fingerprintConfig := cfg.GetFingerprint()
+	if fingerprintConfig.Enabled {
+		if err := fingerprintHandler.InitializeWithAdvancedConfig(
+			fingerprintConfig.FingerprintPath,
+			fingerprintConfig.CacheSize,
+			fingerprintConfig.CacheTTL,
+			fingerprintConfig.UseLayeredIndex,
+			fingerprintConfig.MaxMatches,
+		); err != nil {
+			log.Warnf("Failed to initialize fingerprint handler: %v", err)
+		}
+	}
+
 	// 添加默认处理器
 	processor.AddRequestHandler(&traffic.LoggingHandler{})
 	processor.AddRequestHandler(&traffic.TLSInfoHandler{})
+	processor.AddRequestHandler(patternHandler) // 添加流量模式识别
 	processor.AddResponseHandler(&traffic.LoggingHandler{})
+	processor.AddResponseHandler(patternHandler) // 添加流量模式识别
 
 	if cfg.GetProxy().EnableCompression {
 		processor.AddResponseHandler(traffic.NewCompressionHandler(true))
 	}
-
-	// 创建访问控制器
-	accessController := security.NewAccessController()
 
 	// 创建插件管理器
 	pluginManager := plugin.NewManager("./plugins")
@@ -105,21 +144,24 @@ func NewServer(cfg *config.Config, certMgr *cert.CertManager) (*Server, error) {
 		},
 	}
 
-	server := &Server{
-		config:           cfg,
-		certManager:      certMgr,
-		processor:        processor,
-		accessController: accessController,
-		pluginManager:    pluginManager,
-		client:           client,
-		startTime:        time.Now(),
-		ctx:              ctx,
-		cancel:           cancel,
-	}
+	// 创建高效内存池
+	bufferPool := pool.NewBufferPool(nil) // 使用默认大小配置
 
-	// 初始化连接池
-	server.connPool.New = func() interface{} {
-		return make([]byte, 32*1024) // 32KB缓冲区
+	server := &Server{
+		config:             cfg,
+		certManager:        certMgr,
+		processor:          processor,
+		patternHandler:     patternHandler,
+		fingerprintHandler: fingerprintHandler,
+		accessController:   accessController,
+		pluginManager:      pluginManager,
+		client:             client,
+		bufferPool:         bufferPool,
+		activeConns:        0,
+		totalRequests:      0,
+		startTime:          time.Now(),
+		ctx:                ctx,
+		cancel:             cancel,
 	}
 
 	return server, nil
@@ -209,6 +251,16 @@ func (s *Server) Stop() error {
 		if err := s.pluginManager.Shutdown(); err != nil {
 			logger.Errorf("关闭插件管理器失败: %v", err)
 		}
+	}
+
+	// 关闭指纹识别处理器
+	if s.fingerprintHandler != nil {
+		s.fingerprintHandler.Stop()
+	}
+
+	// 关闭内存池
+	if s.bufferPool != nil {
+		s.bufferPool.Stop()
 	}
 
 	logger.Info("代理服务器已停止")
@@ -317,10 +369,10 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 // proxyWebSocketData 代理WebSocket数据
 func (s *Server) proxyWebSocketData(src, dst net.Conn, direction string) {
-	buffer := s.connPool.Get().([]byte)
-	defer s.connPool.Put(buffer)
+	buffer := s.bufferPool.Get(32 * 1024) // 32KB缓冲区
+	defer s.bufferPool.Put(buffer)
 
-	_, err := io.CopyBuffer(dst, src, buffer)
+	_, err := io.CopyBuffer(dst, src, buffer.Bytes())
 	if err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
 		logger.Debugf("WebSocket数据传输结束 (%s): %v", direction, err)
 	}
@@ -389,50 +441,148 @@ func (s *Server) handleHTTPS(clientConn *tls.Conn, targetHost string) {
 
 	logger.Debugf("开始处理HTTPS连接: %s", targetHost)
 
-	// 创建到目标服务器的连接
-	logger.Debugf("正在连接目标服务器: %s", targetHost)
-	targetConn, err := tls.Dial("tcp", targetHost, &tls.Config{
-		InsecureSkipVerify: true,                              // 忽略目标服务器证书验证
-		ServerName:         strings.Split(targetHost, ":")[0], // 设置SNI
-	})
-	if err != nil {
-		logger.Errorf("连接目标服务器失败: %v", err)
-		return
+	// 创建HTTP服务器来处理解密后的HTTPS流量
+	httpServer := &http.Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// 修复请求URL
+			if r.URL.Scheme == "" {
+				r.URL.Scheme = "https"
+			}
+			if r.URL.Host == "" {
+				r.URL.Host = targetHost
+			}
+
+			// 处理HTTPS请求（类似handleHTTP）
+			s.handleHTTPSRequest(w, r)
+		}),
 	}
-	defer targetConn.Close()
-	logger.Debugf("成功连接到目标服务器: %s", targetHost)
 
-	// 创建双向数据拷贝的通道
-	errChan := make(chan error, 2)
-
-	// 客户端到服务器
-	go func() {
-		buffer := s.connPool.Get().([]byte)
-		defer s.connPool.Put(buffer)
-		logger.Debugf("开始转发客户端到服务器的数据: %s", targetHost)
-		n, err := io.CopyBuffer(targetConn, clientConn, buffer)
-		logger.Debugf("客户端到服务器数据传输完成: %s, 传输字节: %d", targetHost, n)
-		errChan <- err
-	}()
-
-	// 服务器到客户端
-	go func() {
-		buffer := s.connPool.Get().([]byte)
-		defer s.connPool.Put(buffer)
-		logger.Debugf("开始转发服务器到客户端的数据: %s", targetHost)
-		n, err := io.CopyBuffer(clientConn, targetConn, buffer)
-		logger.Debugf("服务器到客户端数据传输完成: %s, 传输字节: %d", targetHost, n)
-		errChan <- err
-	}()
-
-	// 等待任一方向出错或连接关闭
-	for i := 0; i < 2; i++ {
-		if err := <-errChan; err != nil && err != io.EOF {
-			logger.Debugf("HTTPS数据传输结束: %v", err)
-		}
+	// 使用TLS连接作为HTTP服务器的监听器
+	listener := &singleConnListener{conn: clientConn}
+	if err := httpServer.Serve(listener); err != nil && err != http.ErrServerClosed {
+		logger.Debugf("HTTPS服务器错误: %v", err)
 	}
 
 	logger.Debugf("HTTPS连接处理完成: %s", targetHost)
+}
+
+// singleConnListener 单连接监听器
+type singleConnListener struct {
+	conn net.Conn
+	once sync.Once
+}
+
+func (l *singleConnListener) Accept() (net.Conn, error) {
+	var conn net.Conn
+	l.once.Do(func() {
+		conn = l.conn
+	})
+	if conn != nil {
+		return conn, nil
+	}
+	return nil, io.EOF
+}
+
+func (l *singleConnListener) Close() error {
+	return l.conn.Close()
+}
+
+func (l *singleConnListener) Addr() net.Addr {
+	return l.conn.LocalAddr()
+}
+
+// handleHTTPSRequest 处理HTTPS请求（类似handleHTTP但针对HTTPS）
+func (s *Server) handleHTTPSRequest(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	logger.Debugf("处理HTTPS请求: %s %s", r.Method, r.URL.String())
+
+	// 创建请求上下文
+	requestCtx := s.buildRequestContext(r, startTime)
+
+	// 处理请求插件链
+	if err := s.processRequestPlugins(r, requestCtx); err != nil {
+		logger.Errorf("HTTPS请求插件处理失败: %v", err)
+		http.Error(w, "请求处理失败", http.StatusInternalServerError)
+		return
+	}
+
+	// 处理请求
+	if err := s.processor.ProcessRequest(r); err != nil {
+		logger.Errorf("处理HTTPS请求失败: %v", err)
+		http.Error(w, "请求处理失败", http.StatusInternalServerError)
+		return
+	}
+
+	// 创建新的请求（避免修改原始请求）
+	newReq := r.Clone(r.Context())
+	newReq.RequestURI = ""
+
+	// 设置超时上下文
+	ctx, cancel := context.WithTimeout(r.Context(), s.config.GetProxy().UpstreamTimeout)
+	defer cancel()
+	newReq = newReq.WithContext(ctx)
+
+	// 转发请求到目标服务器
+	resp, err := s.client.Do(newReq)
+	if err != nil {
+		logger.Errorf("转发HTTPS请求失败: %v", err)
+		if strings.Contains(err.Error(), "timeout") {
+			http.Error(w, "请求超时", http.StatusGatewayTimeout)
+		} else {
+			http.Error(w, "转发请求失败", http.StatusBadGateway)
+		}
+		return
+	}
+	defer resp.Body.Close()
+
+	// 创建响应上下文
+	responseCtx := s.buildResponseContext(resp, time.Since(startTime))
+
+	// 处理响应插件链
+	if err := s.processResponsePlugins(resp, r, responseCtx); err != nil {
+		logger.Errorf("HTTPS响应插件处理失败: %v", err)
+		http.Error(w, "响应处理失败", http.StatusInternalServerError)
+		return
+	}
+
+	// 处理响应
+	if err := s.processor.ProcessResponse(resp, r); err != nil {
+		logger.Errorf("处理HTTPS响应失败: %v", err)
+		http.Error(w, "响应处理失败", http.StatusInternalServerError)
+		return
+	}
+
+	// 复制响应头
+	for name, values := range resp.Header {
+		for _, value := range values {
+			w.Header().Add(name, value)
+		}
+	}
+
+	// 设置状态码
+	w.WriteHeader(resp.StatusCode)
+
+	// 复制响应体并进行指纹识别
+	buffer := s.bufferPool.Get(32 * 1024) // 32KB缓冲区
+	defer s.bufferPool.Put(buffer)
+
+	// 读取响应体进行指纹识别
+	var bodyBuffer []byte
+	if s.fingerprintHandler != nil {
+		bodyBuffer = make([]byte, 0, 1024*1024) // 1MB限制
+		teeReader := io.TeeReader(resp.Body, &bodyWriter{&bodyBuffer})
+
+		if _, err := io.CopyBuffer(w, teeReader, buffer.Bytes()); err != nil {
+			logger.Errorf("复制HTTPS响应体失败: %v", err)
+		}
+
+		// 执行指纹识别
+		go s.fingerprintHandler.HandleRequest(r, resp, bodyBuffer)
+	} else {
+		if _, err := io.CopyBuffer(w, resp.Body, buffer.Bytes()); err != nil {
+			logger.Errorf("复制HTTPS响应体失败: %v", err)
+		}
+	}
 }
 
 // handleHTTP 处理HTTP请求（增强版，集成插件）
@@ -515,12 +665,36 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(resp.StatusCode)
 
 	// 复制响应体
-	buffer := s.connPool.Get().([]byte)
-	defer s.connPool.Put(buffer)
+	buffer := s.bufferPool.Get(32 * 1024) // 32KB缓冲区
+	defer s.bufferPool.Put(buffer)
 
-	if _, err := io.CopyBuffer(w, resp.Body, buffer); err != nil {
-		logger.Errorf("复制HTTP响应体失败: %v", err)
+	// 读取响应体进行指纹识别
+	var bodyBuffer []byte
+	if s.fingerprintHandler != nil {
+		bodyBuffer = make([]byte, 0, 1024*1024) // 1MB限制
+		teeReader := io.TeeReader(resp.Body, &bodyWriter{&bodyBuffer})
+
+		if _, err := io.CopyBuffer(w, teeReader, buffer.Bytes()); err != nil {
+			logger.Errorf("复制HTTP响应体失败: %v", err)
+		}
+
+		// 执行指纹识别
+		go s.fingerprintHandler.HandleRequest(r, resp, bodyBuffer)
+	} else {
+		if _, err := io.CopyBuffer(w, resp.Body, buffer.Bytes()); err != nil {
+			logger.Errorf("复制HTTP响应体失败: %v", err)
+		}
 	}
+}
+
+// bodyWriter 用于收集响应体数据
+type bodyWriter struct {
+	buffer *[]byte
+}
+
+func (bw *bodyWriter) Write(p []byte) (n int, err error) {
+	*bw.buffer = append(*bw.buffer, p...)
+	return len(p), nil
 }
 
 // buildRequestContext 构建请求上下文
@@ -640,9 +814,57 @@ func (s *Server) StartPlugins() error {
 	return s.pluginManager.StartAll()
 }
 
+// GetBufferPool 获取内存池引用
+func (s *Server) GetBufferPool() *pool.BufferPool {
+	return s.bufferPool
+}
+
 // GetPluginManager 获取插件管理器
 func (s *Server) GetPluginManager() *plugin.Manager {
 	return s.pluginManager
+}
+
+// GetPatternHandler 获取流量模式识别处理器
+func (s *Server) GetPatternHandler() *traffic.PatternHandler {
+	return s.patternHandler
+}
+
+// SetPatternRecognitionEnabled 设置流量模式识别启用状态
+func (s *Server) SetPatternRecognitionEnabled(enabled bool) {
+	if s.patternHandler != nil {
+		s.patternHandler.SetEnabled(enabled)
+	}
+}
+
+// GetPatternRecognitionStats 获取流量模式识别统计信息
+func (s *Server) GetPatternRecognitionStats() map[string]interface{} {
+	if s.patternHandler != nil {
+		return s.patternHandler.GetStats()
+	}
+	return map[string]interface{}{"enabled": false}
+}
+
+// GetFingerprintHandler 获取指纹识别处理器
+func (s *Server) GetFingerprintHandler() *fingerprint.FingerprintHandler {
+	return s.fingerprintHandler
+}
+
+// SetFingerprintEnabled 设置指纹识别是否启用
+func (s *Server) SetFingerprintEnabled(enabled bool) {
+	if s.fingerprintHandler == nil {
+		return
+	}
+	// 可以在这里添加启用/禁用逻辑
+}
+
+// GetFingerprintStats 获取指纹识别统计信息
+func (s *Server) GetFingerprintStats() map[string]interface{} {
+	if s.fingerprintHandler == nil {
+		return map[string]interface{}{
+			"enabled": false,
+		}
+	}
+	return s.fingerprintHandler.GetStats()
 }
 
 // GetStats 获取服务器统计信息（增强版）
@@ -659,9 +881,25 @@ func (s *Server) GetStats() map[string]interface{} {
 		"start_time":          s.startTime.Format(time.RFC3339),
 	}
 
+	// 添加流量模式识别统计信息
+	if s.patternHandler != nil {
+		stats["pattern_recognition"] = s.patternHandler.GetStats()
+	}
+
+	// 添加指纹识别统计信息
+	if s.fingerprintHandler != nil {
+		stats["fingerprint"] = s.fingerprintHandler.GetStats()
+		stats["fingerprint_stats"] = s.fingerprintHandler.GetStats()
+	}
+
 	// 添加插件统计信息
 	if s.pluginManager != nil {
 		stats["plugins"] = s.pluginManager.GetStats()
+	}
+
+	// 添加内存池统计信息
+	if s.bufferPool != nil {
+		stats["buffer_pool"] = s.bufferPool.GetStats()
 	}
 
 	return stats

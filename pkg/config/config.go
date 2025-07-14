@@ -31,6 +31,10 @@ type Config struct {
 	Logging LoggingConfig `json:"logging"`
 	// Performance 性能配置
 	Performance PerformanceConfig `json:"performance"`
+	// PatternRecognition 流量模式识别配置
+	PatternRecognition PatternRecognitionConfig `json:"pattern_recognition"`
+	// Fingerprint 指纹识别配置
+	Fingerprint FingerprintConfig `json:"fingerprint"`
 
 	// 内部字段
 	mu       sync.RWMutex
@@ -157,6 +161,37 @@ type PerformanceConfig struct {
 	PProfPort int `json:"pprof_port"`
 }
 
+// PatternRecognitionConfig 流量模式识别配置
+// PatternRecognitionConfig pattern recognition configuration
+type PatternRecognitionConfig struct {
+	// Enabled 启用流量模式识别
+	Enabled bool `json:"enabled"`
+	// ConfidenceThreshold 置信度阈值
+	ConfidenceThreshold float64 `json:"confidence_threshold"`
+	// CacheSize 缓存大小
+	CacheSize int `json:"cache_size"`
+	// CacheTTL 缓存TTL（秒）
+	CacheTTL int `json:"cache_ttl"`
+}
+
+// FingerprintConfig 指纹识别配置
+type FingerprintConfig struct {
+	// Enabled 启用指纹识别
+	Enabled bool `json:"enabled"`
+	// FingerprintPath 指纹库文件路径
+	FingerprintPath string `json:"fingerprint_path"`
+	// CacheSize 缓存大小
+	CacheSize int `json:"cache_size"`
+	// CacheTTL 缓存TTL（秒）
+	CacheTTL int `json:"cache_ttl"`
+	// FaviconTimeout favicon获取超时时间（秒）
+	FaviconTimeout int `json:"favicon_timeout"`
+	// UseLayeredIndex 启用分层索引
+	UseLayeredIndex bool `json:"use_layered_index"`
+	// MaxMatches 最大匹配数量
+	MaxMatches int `json:"max_matches"`
+}
+
 // PluginsConfig 插件配置
 // PluginsConfig plugins configuration
 type PluginsConfig struct {
@@ -280,6 +315,19 @@ func getDefaultConfig() *Config {
 			BufferSize:    4096,
 			EnablePProf:   false,
 			PProfPort:     6060,
+		},
+		PatternRecognition: PatternRecognitionConfig{
+			Enabled:             true,
+			ConfidenceThreshold: 0.6,
+			CacheSize:           1000,
+			CacheTTL:            300, // 5分钟
+		},
+		Fingerprint: FingerprintConfig{
+			Enabled:         false,
+			FingerprintPath: "configs/finger.json",
+			CacheSize:       1000,
+			CacheTTL:        300,
+			FaviconTimeout:  10,
 		},
 	}
 }
@@ -429,6 +477,22 @@ func (c *Config) GetPerformance() PerformanceConfig {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.Performance
+}
+
+// GetPatternRecognition 获取流量模式识别配置
+// GetPatternRecognition returns pattern recognition configuration
+func (c *Config) GetPatternRecognition() PatternRecognitionConfig {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.PatternRecognition
+}
+
+// GetFingerprint 获取指纹识别配置
+// GetFingerprint returns fingerprint configuration
+func (c *Config) GetFingerprint() FingerprintConfig {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.Fingerprint
 }
 
 // StartConfigWatcher 启动配置文件监控

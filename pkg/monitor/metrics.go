@@ -12,7 +12,13 @@ import (
 	"time"
 
 	"hackmitm/pkg/logger"
+	"hackmitm/pkg/pool"
 )
+
+// ProxyStatsProvider 代理服务器统计信息提供者接口
+type ProxyStatsProvider interface {
+	GetStats() map[string]interface{}
+}
 
 // Metrics 指标收集器
 type Metrics struct {
@@ -36,6 +42,12 @@ type Metrics struct {
 	// 连接统计
 	activeConns int64
 	totalConns  int64
+
+	// 内存池引用
+	bufferPool *pool.BufferPool
+
+	// 代理服务器统计提供者
+	proxyStatsProvider ProxyStatsProvider
 
 	// 锁保护
 	mutex sync.RWMutex
@@ -147,7 +159,21 @@ func (m *Metrics) SetActiveConnections(count int64) {
 	atomic.StoreInt64(&m.activeConns, count)
 }
 
-// GetStats 获取统计信息
+// SetBufferPool 设置内存池引用
+func (m *Metrics) SetBufferPool(bufferPool *pool.BufferPool) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	m.bufferPool = bufferPool
+}
+
+// SetProxyStatsProvider 设置代理服务器统计提供者
+func (m *Metrics) SetProxyStatsProvider(provider ProxyStatsProvider) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	m.proxyStatsProvider = provider
+}
+
+// GetStats 获取统计信息（增强版，包含代理服务器统计）
 func (m *Metrics) GetStats() map[string]interface{} {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
@@ -183,6 +209,33 @@ func (m *Metrics) GetStats() map[string]interface{} {
 			"gc_runs":     memStats.NumGC,
 		},
 		"goroutines": runtime.NumGoroutine(),
+	}
+
+	// 添加内存池统计信息
+	if m.bufferPool != nil {
+		poolStats := m.bufferPool.GetStats()
+		stats["buffer_pool"] = map[string]interface{}{
+			"total_allocated":        poolStats.TotalAllocated,
+			"total_released":         poolStats.TotalReleased,
+			"current_in_use":         poolStats.CurrentInUse,
+			"hit_rate":               poolStats.HitRate,
+			"total_hits":             poolStats.TotalHits,
+			"total_miss":             poolStats.TotalMiss,
+			"total_memory_allocated": poolStats.TotalMemoryAllocated,
+			"total_memory_released":  poolStats.TotalMemoryReleased,
+			"size_distribution":      poolStats.SizeDistribution,
+			"last_gc_time":           poolStats.LastGCTime.Format(time.RFC3339),
+			"gc_count":               poolStats.GCCount,
+		}
+	}
+
+	// 添加代理服务器统计信息（包含访问控制器信息）
+	if m.proxyStatsProvider != nil {
+		proxyStats := m.proxyStatsProvider.GetStats()
+		// 合并代理服务器的统计信息
+		for key, value := range proxyStats {
+			stats[key] = value
+		}
 	}
 
 	return stats
@@ -231,12 +284,15 @@ func (hc *HealthChecker) CheckHealth() HealthStatus {
 func (ms *MonitorServer) Start() error {
 	mux := http.NewServeMux()
 
-	// 指标端点
+	// 注册路由
 	mux.HandleFunc("/metrics", ms.handleMetrics)
-	// 健康检查端点
 	mux.HandleFunc("/health", ms.handleHealth)
-	// 详细状态端点
 	mux.HandleFunc("/status", ms.handleStatus)
+	mux.HandleFunc("/patterns", ms.handlePatterns)
+	mux.HandleFunc("/patterns/stats", ms.handlePatternStats)
+	mux.HandleFunc("/fingerprint", ms.handleFingerprint)
+	mux.HandleFunc("/fingerprint/stats", ms.handleFingerprintStats)
+	mux.HandleFunc("/fingerprint/identify", ms.handleFingerprintIdentify)
 
 	ms.server = &http.Server{
 		Addr:    fmt.Sprintf(":%d", ms.port),
@@ -286,6 +342,175 @@ func (ms *MonitorServer) handleStatus(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(status)
 }
 
+// handlePatterns 处理流量模式请求
+func (ms *MonitorServer) handlePatterns(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	// 从代理服务器获取流量模式信息
+	stats := ms.metrics.GetStats()
+	if patternStats, exists := stats["pattern_recognition"]; exists {
+		json.NewEncoder(w).Encode(patternStats)
+	} else {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "流量模式识别功能未启用",
+		})
+	}
+}
+
+// handlePatternStats 处理流量模式识别统计信息请求
+func (ms *MonitorServer) handlePatternStats(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if ms.metrics.proxyStatsProvider == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "Pattern recognition not available",
+		})
+		return
+	}
+
+	// 获取代理服务器统计信息
+	stats := ms.metrics.proxyStatsProvider.GetStats()
+
+	// 提取流量模式识别统计信息
+	var patternStats map[string]interface{}
+	if patternData, exists := stats["pattern_recognition"]; exists {
+		if patternMap, ok := patternData.(map[string]interface{}); ok {
+			patternStats = patternMap
+		}
+	}
+
+	if patternStats == nil {
+		patternStats = map[string]interface{}{
+			"enabled": false,
+		}
+	}
+
+	json.NewEncoder(w).Encode(patternStats)
+}
+
+// handleFingerprint 处理指纹识别请求
+func (ms *MonitorServer) handleFingerprint(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if ms.metrics.proxyStatsProvider == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "Fingerprint recognition not available",
+		})
+		return
+	}
+
+	// 获取代理服务器统计信息
+	stats := ms.metrics.proxyStatsProvider.GetStats()
+
+	// 提取指纹识别信息
+	var fingerprintData map[string]interface{}
+	if fingerprint, exists := stats["fingerprint"]; exists {
+		if fingerprintMap, ok := fingerprint.(map[string]interface{}); ok {
+			fingerprintData = fingerprintMap
+		}
+	}
+
+	if fingerprintData == nil {
+		fingerprintData = map[string]interface{}{
+			"enabled": false,
+		}
+	}
+
+	json.NewEncoder(w).Encode(fingerprintData)
+}
+
+// handleFingerprintStats 处理指纹识别统计信息请求
+func (ms *MonitorServer) handleFingerprintStats(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if ms.metrics.proxyStatsProvider == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "Fingerprint recognition not available",
+		})
+		return
+	}
+
+	// 获取代理服务器统计信息
+	stats := ms.metrics.proxyStatsProvider.GetStats()
+
+	// 提取指纹识别统计信息
+	var fingerprintStats map[string]interface{}
+	if fingerprintData, exists := stats["fingerprint_stats"]; exists {
+		if fingerprintMap, ok := fingerprintData.(map[string]interface{}); ok {
+			fingerprintStats = fingerprintMap
+		}
+	}
+
+	if fingerprintStats == nil {
+		fingerprintStats = map[string]interface{}{
+			"enabled": false,
+		}
+	}
+
+	json.NewEncoder(w).Encode(fingerprintStats)
+}
+
+// handleFingerprintIdentify 处理指纹识别URL请求
+func (ms *MonitorServer) handleFingerprintIdentify(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// 解析请求参数
+	var request struct {
+		URL string `json:"url"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if request.URL == "" {
+		http.Error(w, "URL is required", http.StatusBadRequest)
+		return
+	}
+
+	// 尝试从代理服务器获取指纹识别处理器
+	if ms.metrics.proxyStatsProvider != nil {
+		// 获取代理服务器统计信息，检查是否有指纹识别功能
+		stats := ms.metrics.proxyStatsProvider.GetStats()
+		if fingerprintData, exists := stats["fingerprint"]; exists {
+			if fingerprintMap, ok := fingerprintData.(map[string]interface{}); ok {
+				if status, exists := fingerprintMap["status"]; exists && status == "active" {
+					// 指纹识别功能可用，但由于架构限制，我们无法直接调用
+					// 建议用户通过代理方式进行指纹识别
+					response := map[string]interface{}{
+						"url":         request.URL,
+						"fingerprint": []string{},
+						"confidence":  0.0,
+						"message":     "请通过代理服务器访问URL以进行指纹识别",
+						"proxy_url":   "http://localhost:8082",
+						"suggestion":  fmt.Sprintf("curl -x http://localhost:8082 %s", request.URL),
+					}
+					json.NewEncoder(w).Encode(response)
+					return
+				}
+			}
+		}
+	}
+
+	// 指纹识别功能不可用
+	response := map[string]interface{}{
+		"url":         request.URL,
+		"fingerprint": []string{},
+		"confidence":  0.0,
+		"message":     "指纹识别功能不可用",
+		"error":       "Fingerprint recognition service not available",
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
 // 预定义的健康检查
 
 // MemoryCheck 内存检查
@@ -332,6 +557,47 @@ func (gc *GoroutineCheck) Check() error {
 	current := runtime.NumGoroutine()
 	if current > gc.maxGoroutines {
 		return fmt.Errorf("Goroutine数量过多: %d > %d", current, gc.maxGoroutines)
+	}
+
+	return nil
+}
+
+// BufferPoolCheck 内存池健康检查
+type BufferPoolCheck struct {
+	bufferPool     *pool.BufferPool
+	maxHitRate     float64
+	maxMemoryUsage int64
+}
+
+// NewBufferPoolCheck 创建内存池健康检查
+func NewBufferPoolCheck(bufferPool *pool.BufferPool, maxHitRate float64, maxMemoryUsage int64) *BufferPoolCheck {
+	return &BufferPoolCheck{
+		bufferPool:     bufferPool,
+		maxHitRate:     maxHitRate,
+		maxMemoryUsage: maxMemoryUsage,
+	}
+}
+
+func (bpc *BufferPoolCheck) Name() string {
+	return "buffer_pool"
+}
+
+func (bpc *BufferPoolCheck) Check() error {
+	if bpc.bufferPool == nil {
+		return fmt.Errorf("内存池未初始化")
+	}
+
+	stats := bpc.bufferPool.GetStats()
+
+	// 检查命中率
+	if stats.HitRate < bpc.maxHitRate {
+		return fmt.Errorf("内存池命中率过低: %.2f%% < %.2f%%", stats.HitRate*100, bpc.maxHitRate*100)
+	}
+
+	// 检查内存使用
+	memoryInUse := stats.TotalMemoryAllocated - stats.TotalMemoryReleased
+	if memoryInUse > bpc.maxMemoryUsage {
+		return fmt.Errorf("内存池使用过多: %d bytes > %d bytes", memoryInUse, bpc.maxMemoryUsage)
 	}
 
 	return nil
