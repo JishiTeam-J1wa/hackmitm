@@ -12,8 +12,6 @@ help:
 	@echo ""
 	@echo "可用目标:"
 	@echo "  examples     - 构建所有示例插件"
-	@echo "  request-logger - 构建请求日志插件"
-	@echo "  traffic-stats  - 构建流量统计插件"
 	@echo "  clean        - 清理构建文件"
 	@echo "  install      - 安装插件到指定目录"
 	@echo "  test         - 运行插件测试"
@@ -26,7 +24,6 @@ help:
 	@echo "示例:"
 	@echo "  make examples"
 	@echo "  make install DESTDIR=/opt/hackmitm/plugins"
-	@echo "  make request-logger"
 
 # 环境变量
 GO ?= go
@@ -36,18 +33,66 @@ EXAMPLES_DIR = examples
 OUTPUT_DIR = $(EXAMPLES_DIR)
 
 # 插件列表
-PLUGINS = request_logger traffic_stats
+PLUGINS = request_logger security_plugin stats_plugin plugin_template
 
 # 构建所有示例插件
-examples: $(PLUGINS)
+examples: request_logger security stats simple_plugin
 
 # 单个插件构建规则
-request_logger: $(OUTPUT_DIR)/request_logger.so
+request_logger:
+	@echo "构建插件: request_logger"
+	@mkdir -p $(OUTPUT_DIR)
+	$(GO) build $(BUILD_FLAGS) -o $(OUTPUT_DIR)/request_logger.so $(EXAMPLES_DIR)/request_logger/*.go
+	@if [ -f $(OUTPUT_DIR)/request_logger.so ]; then \
+		echo "✓ 插件构建成功: $(OUTPUT_DIR)/request_logger.so"; \
+		echo "  大小: $$(du -h $(OUTPUT_DIR)/request_logger.so | cut -f1)"; \
+		echo "  修改时间: $$(stat -f '%Sm' $(OUTPUT_DIR)/request_logger.so 2>/dev/null || stat -c '%y' $(OUTPUT_DIR)/request_logger.so 2>/dev/null || echo 'unknown')"; \
+	else \
+		echo "✗ 插件构建失败: $(OUTPUT_DIR)/request_logger.so"; \
+		exit 1; \
+	fi
 
-traffic_stats: $(OUTPUT_DIR)/traffic_stats.so
+security:
+	@echo "构建插件: security"
+	@mkdir -p $(OUTPUT_DIR)
+	$(GO) build $(BUILD_FLAGS) -o $(OUTPUT_DIR)/security_plugin.so $(EXAMPLES_DIR)/security/*.go
+	@if [ -f $(OUTPUT_DIR)/security_plugin.so ]; then \
+		echo "✓ 插件构建成功: $(OUTPUT_DIR)/security_plugin.so"; \
+		echo "  大小: $$(du -h $(OUTPUT_DIR)/security_plugin.so | cut -f1)"; \
+		echo "  修改时间: $$(stat -f '%Sm' $(OUTPUT_DIR)/security_plugin.so 2>/dev/null || stat -c '%y' $(OUTPUT_DIR)/security_plugin.so 2>/dev/null || echo 'unknown')"; \
+	else \
+		echo "✗ 插件构建失败: $(OUTPUT_DIR)/security_plugin.so"; \
+		exit 1; \
+	fi
+
+stats:
+	@echo "构建插件: stats"
+	@mkdir -p $(OUTPUT_DIR)
+	$(GO) build $(BUILD_FLAGS) -o $(OUTPUT_DIR)/stats_plugin.so $(EXAMPLES_DIR)/stats/*.go
+	@if [ -f $(OUTPUT_DIR)/stats_plugin.so ]; then \
+		echo "✓ 插件构建成功: $(OUTPUT_DIR)/stats_plugin.so"; \
+		echo "  大小: $$(du -h $(OUTPUT_DIR)/stats_plugin.so | cut -f1)"; \
+		echo "  修改时间: $$(stat -f '%Sm' $(OUTPUT_DIR)/stats_plugin.so 2>/dev/null || stat -c '%y' $(OUTPUT_DIR)/stats_plugin.so 2>/dev/null || echo 'unknown')"; \
+	else \
+		echo "✗ 插件构建失败: $(OUTPUT_DIR)/stats_plugin.so"; \
+		exit 1; \
+	fi
+
+simple_plugin:
+	@echo "构建插件: simple_plugin"
+	@mkdir -p $(OUTPUT_DIR)
+	$(GO) build $(BUILD_FLAGS) -o $(OUTPUT_DIR)/simple_plugin.so $(EXAMPLES_DIR)/simple_plugin_template/*.go
+	@if [ -f $(OUTPUT_DIR)/simple_plugin.so ]; then \
+		echo "✓ 插件构建成功: $(OUTPUT_DIR)/simple_plugin.so"; \
+		echo "  大小: $$(du -h $(OUTPUT_DIR)/simple_plugin.so | cut -f1)"; \
+		echo "  修改时间: $$(stat -f '%Sm' $(OUTPUT_DIR)/simple_plugin.so 2>/dev/null || stat -c '%y' $(OUTPUT_DIR)/simple_plugin.so 2>/dev/null || echo 'unknown')"; \
+	else \
+		echo "✗ 插件构建失败: $(OUTPUT_DIR)/simple_plugin.so"; \
+		exit 1; \
+	fi
 
 # 通用构建规则
-$(OUTPUT_DIR)/%.so: $(EXAMPLES_DIR)/%.go
+$(OUTPUT_DIR)/%.so: $(EXAMPLES_DIR)/%/*.go
 	@echo "构建插件: $*"
 	@mkdir -p $(OUTPUT_DIR)
 	$(GO) build $(BUILD_FLAGS) -o $@ $<
@@ -114,7 +159,7 @@ info:
 	@echo "已构建的插件:"
 	@ls -la $(OUTPUT_DIR)/*.so 2>/dev/null || echo "  (无已构建插件)"
 
-# 开发助手 - 创建新插件模板
+# 开发助手 - 创建新插件
 new-plugin:
 	@read -p "输入插件名称: " name && \
 	if [ -n "$$name" ]; then \
@@ -124,49 +169,10 @@ new-plugin:
 			exit 1; \
 		fi; \
 		echo "创建插件模板: $$plugin_file"; \
-		cat > "$$plugin_file" << 'EOF'; \
-package main\
-\
-import (\
-	"context"\
-	"net/http"\
-	"hackmitm/pkg/plugin"\
-	"hackmitm/pkg/logger"\
-)\
-\
-// PLUGIN_NAME_Plugin 自定义插件\
-type PLUGIN_NAME_Plugin struct {\
-	*plugin.BasePlugin\
-}\
-\
-// NewPlugin 创建插件实例\
-func NewPlugin(config map[string]interface{}) (plugin.Plugin, error) {\
-	base := plugin.NewBasePlugin("PLUGIN_NAME", "1.0.0", "PLUGIN_NAME 插件描述")\
-	\
-	p := &PLUGIN_NAME_Plugin{\
-		BasePlugin: base,\
-	}\
-	\
-	return p, nil\
-}\
-\
-// Priority 返回插件优先级\
-func (p *PLUGIN_NAME_Plugin) Priority() int {\
-	return p.GetConfigInt("priority", 100)\
-}\
-\
-// ProcessRequest 处理HTTP请求\
-func (p *PLUGIN_NAME_Plugin) ProcessRequest(req *http.Request, ctx *plugin.RequestContext) error {\
-	logger.Infof("插件 %s 处理请求: %s %s", p.Name(), req.Method, req.URL.String())\
-	return nil\
-}\
-\
-// 确保实现了接口\
-var _ plugin.RequestPlugin = (*PLUGIN_NAME_Plugin)(nil)\
-EOF\
-		sed -i.bak "s/PLUGIN_NAME/$$name/g" "$$plugin_file" && rm "$$plugin_file.bak" 2>/dev/null || sed -i "s/PLUGIN_NAME/$$name/g" "$$plugin_file"; \
+		cp $(EXAMPLES_DIR)/plugin_template.go "$$plugin_file"; \
+		sed -i.bak "s/template/$$name/g" "$$plugin_file" && rm "$$plugin_file.bak" 2>/dev/null || sed -i "s/template/$$name/g" "$$plugin_file"; \
 		echo "✓ 插件模板创建完成: $$plugin_file"; \
-		echo "现在可以编辑插件并运行: make $${name}"; \
+		echo "现在可以编辑插件并运行: make $$name"; \
 	else \
 		echo "错误: 插件名称不能为空"; \
 		exit 1; \
