@@ -133,26 +133,565 @@
 
 <div style="background: linear-gradient(45deg, #667eea, #764ba2); border-radius: 20px; padding: 30px; color: white; margin: 20px 0;">
 
+### 🎯 整体架构思路
+
+HackMITM 采用**分层模块化架构**，通过**事件驱动**和**插件化设计**实现高性能、高可扩展性的代理服务。系统设计遵循**单一职责原则**，每个模块都有明确的功能边界，通过**依赖注入**和**接口抽象**实现松耦合。
+
+### 🔄 核心架构图
+
 ```mermaid
 graph TB
-    A[客户端请求] --> B[代理服务器]
-    B --> C[插件管理器]
-    C --> D[安全检查]
-    D --> E[流量处理]
-    E --> F[目标服务器]
+    subgraph "🌐 客户端层"
+        Client[客户端应用]
+        Browser[浏览器]
+        Tools[安全工具]
+    end
     
-    C --> G[请求日志]
-    C --> H[统计分析]
-    C --> I[自定义插件]
+    subgraph "🚪 接入层"
+        ProxyServer[代理服务器<br/>HTTP/HTTPS/WebSocket]
+        CertManager[证书管理器<br/>自动证书生成]
+        TLSHandler[TLS处理器<br/>握手与加密]
+    end
     
-    B --> J[证书管理]
-    B --> K[监控系统]
+    subgraph "🔧 处理层"
+        PluginManager[插件管理器<br/>动态加载与执行]
+        TrafficProcessor[流量处理器<br/>请求/响应处理链]
+        SecurityManager[安全管理器<br/>访问控制与防护]
+        PatternHandler[模式识别器<br/>流量模式分析]
+    end
     
-    style A fill:#ff6b9d
-    style B fill:#4ecdc4
-    style C fill:#45b7d1
-    style F fill:#96ceb4
+    subgraph "🧠 智能层"
+        FingerprintEngine[指纹识别引擎<br/>分层索引系统]
+        LayeredIndex[三层索引<br/>O(1)→O(logN)→O(N)]
+        LRUCache[LRU缓存<br/>智能TTL管理]
+        PatternRecognizer[流量模式识别<br/>AI驱动分析]
+    end
+    
+    subgraph "💾 存储层"
+        ConfigManager[配置管理器<br/>热加载配置]
+        BufferPool[内存池<br/>高效内存管理]
+        Logger[日志系统<br/>分级记录]
+    end
+    
+    subgraph "📊 监控层"
+        MetricsCollector[指标收集器<br/>实时性能监控]
+        HealthChecker[健康检查器<br/>系统状态监测]
+        MonitorServer[监控服务器<br/>REST API]
+    end
+    
+    subgraph "🎯 目标层"
+        TargetServers[目标服务器]
+        WebServices[Web服务]
+        APIs[API接口]
+    end
+    
+    %% 连接关系
+    Client --> ProxyServer
+    Browser --> ProxyServer
+    Tools --> ProxyServer
+    
+    ProxyServer --> CertManager
+    ProxyServer --> TLSHandler
+    ProxyServer --> PluginManager
+    ProxyServer --> TrafficProcessor
+    ProxyServer --> SecurityManager
+    
+    PluginManager --> PatternHandler
+    TrafficProcessor --> FingerprintEngine
+    TrafficProcessor --> PatternRecognizer
+    
+    FingerprintEngine --> LayeredIndex
+    FingerprintEngine --> LRUCache
+    PatternHandler --> PatternRecognizer
+    
+    PluginManager --> ConfigManager
+    TrafficProcessor --> BufferPool
+    SecurityManager --> Logger
+    
+    ProxyServer --> MetricsCollector
+    MetricsCollector --> HealthChecker
+    MetricsCollector --> MonitorServer
+    
+    ProxyServer --> TargetServers
+    ProxyServer --> WebServices
+    ProxyServer --> APIs
+    
+    %% 样式
+    classDef clientLayer fill:#ff6b9d,stroke:#fff,stroke-width:2px,color:#fff
+    classDef accessLayer fill:#4ecdc4,stroke:#fff,stroke-width:2px,color:#fff
+    classDef processLayer fill:#45b7d1,stroke:#fff,stroke-width:2px,color:#fff
+    classDef intelligentLayer fill:#96ceb4,stroke:#fff,stroke-width:2px,color:#fff
+    classDef storageLayer fill:#feca57,stroke:#fff,stroke-width:2px,color:#fff
+    classDef monitorLayer fill:#ff9ff3,stroke:#fff,stroke-width:2px,color:#fff
+    classDef targetLayer fill:#54a0ff,stroke:#fff,stroke-width:2px,color:#fff
+    
+    class Client,Browser,Tools clientLayer
+    class ProxyServer,CertManager,TLSHandler accessLayer
+    class PluginManager,TrafficProcessor,SecurityManager,PatternHandler processLayer
+    class FingerprintEngine,LayeredIndex,LRUCache,PatternRecognizer intelligentLayer
+    class ConfigManager,BufferPool,Logger storageLayer
+    class MetricsCollector,HealthChecker,MonitorServer monitorLayer
+    class TargetServers,WebServices,APIs targetLayer
 ```
+
+### 🏛️ 分层架构设计
+
+#### 1. **客户端层** (Client Layer)
+负责接收来自各种客户端的请求，支持多协议接入：
+- **浏览器代理**：标准HTTP/HTTPS代理模式
+- **安全工具集成**：与Burp Suite、OWASP ZAP等工具对接
+- **API客户端**：支持REST、GraphQL等API调用
+
+#### 2. **接入层** (Access Layer)
+处理协议层面的接入和基础安全：
+```go
+// 接入层核心组件
+type AccessLayer struct {
+    ProxyServer  *proxy.Server      // 主代理服务器
+    CertManager  *cert.Manager      // 证书管理器
+    TLSHandler   *tls.Handler       // TLS处理器
+}
+```
+
+- **代理服务器**：基于Go net/http实现，支持HTTP/1.1、HTTP/2、WebSocket
+- **证书管理器**：动态生成和缓存TLS证书，支持SNI
+- **TLS处理器**：处理TLS握手、协议协商、加密解密
+
+#### 3. **处理层** (Processing Layer)
+核心业务逻辑处理，采用**责任链模式**：
+```go
+// 处理器链模式
+type ProcessingChain struct {
+    SecurityCheck    → PluginExecution → TrafficProcessing → PatternAnalysis
+    ↓                 ↓                  ↓                   ↓
+    访问控制          插件钩子执行        流量解析处理         模式识别分析
+}
+```
+
+- **插件管理器**：动态加载、生命周期管理、钩子执行
+- **流量处理器**：请求/响应解析、修改、转发
+- **安全管理器**：访问控制、攻击检测、速率限制
+- **模式识别器**：智能流量分析、行为模式识别
+
+#### 4. **智能层** (Intelligence Layer)
+提供AI驱动的智能分析能力：
+
+**🔍 指纹识别引擎** - 三层优化架构：
+```
+第一层：快速过滤 (O(1))     第二层：索引查找 (O(logN))    第三层：深度匹配 (O(N))
+├─ HTTP头特征索引          ├─ 标题关键字索引           ├─ 正则表达式匹配
+├─ 状态码索引             ├─ 内容关键字索引           ├─ Favicon Hash匹配
+└─ URL路径特征索引        └─ 分词倒排索引            └─ 深度内容分析
+```
+
+**🧠 LRU缓存系统** - 智能缓存策略：
+```go
+type LRUCache struct {
+    capacity  int                    // 容量管理
+    ttl       time.Duration         // 生存时间
+    lru       *list.List           // 使用频率链表
+    hash      map[string]*Element   // 快速查找哈希表
+}
+```
+
+#### 5. **存储层** (Storage Layer)
+数据持久化和内存管理：
+- **配置管理器**：支持热加载、环境变量、配置验证
+- **内存池系统**：零拷贝缓冲区管理、内存复用
+- **日志系统**：结构化日志、分级输出、轮转管理
+
+#### 6. **监控层** (Monitoring Layer)
+系统可观测性：
+- **指标收集器**：实时性能指标、业务指标
+- **健康检查器**：服务健康状态、依赖检查
+- **监控服务器**：REST API、指标导出、告警
+
+### 🔄 数据流向图
+
+```mermaid
+sequenceDiagram
+    participant C as 客户端
+    participant P as 代理服务器
+    participant S as 安全管理器
+    participant PM as 插件管理器
+    participant TP as 流量处理器
+    participant FE as 指纹引擎
+    participant T as 目标服务器
+    participant M as 监控系统
+    
+    C->>P: 1. HTTP/HTTPS请求
+    P->>S: 2. 安全检查(IP白名单/黑名单)
+    S-->>P: 3. 通过/拒绝
+    
+    alt 请求被允许
+        P->>PM: 4. 插件前置处理
+        PM->>PM: 5. 执行BeforeRequest钩子
+        PM-->>P: 6. 处理结果
+        
+        P->>TP: 7. 流量处理
+        TP->>TP: 8. 请求解析/修改
+        TP-->>P: 9. 处理完成
+        
+        P->>T: 10. 转发请求
+        T-->>P: 11. 返回响应
+        
+        P->>FE: 12. 指纹识别
+        FE->>FE: 13. 三层索引查找
+        FE-->>P: 14. 识别结果
+        
+        P->>PM: 15. 插件后置处理
+        PM->>PM: 16. 执行AfterResponse钩子
+        PM-->>P: 17. 处理结果
+        
+        P->>M: 18. 指标上报
+        P-->>C: 19. 返回响应
+    else 请求被拒绝
+        P-->>C: 403 Forbidden
+    end
+```
+
+### ⚡ 性能优化策略
+
+#### 1. **并发优化**
+```go
+// 协程池管理
+type WorkerPool struct {
+    workers    chan chan Job      // 工作线程池
+    jobQueue   chan Job          // 任务队列
+    maxWorkers int               // 最大工作线程数
+}
+
+// 连接池复用
+type ConnectionPool struct {
+    conns    sync.Pool           // 连接池
+    maxIdle  int                // 最大空闲连接
+    maxOpen  int                // 最大打开连接
+}
+```
+
+#### 2. **内存优化**
+```go
+// 零拷贝缓冲区
+type BufferPool struct {
+    small   sync.Pool    // 小缓冲区 (< 1KB)
+    medium  sync.Pool    // 中缓冲区 (1KB - 64KB)
+    large   sync.Pool    // 大缓冲区 (> 64KB)
+}
+
+// 对象复用
+var requestPool = sync.Pool{
+    New: func() interface{} {
+        return &RequestContext{}
+    },
+}
+```
+
+#### 3. **缓存优化**
+- **多级缓存**：L1(内存) → L2(Redis) → L3(磁盘)
+- **智能预加载**：基于访问模式预测性加载
+- **TTL策略**：差异化生存时间管理
+
+### 🔧 核心设计模式
+
+#### 1. **插件模式** (Plugin Pattern)
+```go
+type Plugin interface {
+    Name() string
+    Initialize(config map[string]interface{}) error
+    ProcessRequest(*http.Request, *RequestContext) error
+    ProcessResponse(*http.Response, *ResponseContext) error
+}
+```
+
+#### 2. **责任链模式** (Chain of Responsibility)
+```go
+type Handler interface {
+    SetNext(Handler) Handler
+    Handle(*RequestContext) error
+}
+```
+
+#### 3. **观察者模式** (Observer Pattern)
+```go
+type EventBus interface {
+    Subscribe(topic string, handler EventHandler)
+    Publish(topic string, event Event)
+}
+```
+
+#### 4. **工厂模式** (Factory Pattern)
+```go
+type PluginFactory interface {
+    CreatePlugin(name string, config Config) (Plugin, error)
+}
+```
+
+### 🛡️ 安全架构
+
+#### 多层安全防护：
+1. **网络层**：IP白名单/黑名单、地理位置过滤
+2. **协议层**：TLS版本控制、密码套件限制
+3. **应用层**：请求头验证、内容检查
+4. **业务层**：权限控制、业务逻辑验证
+
+#### 攻击检测引擎：
+```go
+type SecurityEngine struct {
+    sqlInjectionDetector  *SQLInjectionDetector
+    xssDetector          *XSSDetector
+    pathTraversalDetector *PathTraversalDetector
+    commandInjectionDetector *CommandInjectionDetector
+}
+```
+
+### 🏗️ 模块依赖关系
+
+```mermaid
+graph LR
+    subgraph "🔧 核心模块"
+        Config[配置管理]
+        Logger[日志系统]
+        Pool[内存池]
+    end
+    
+    subgraph "🚪 网络层"
+        Proxy[代理服务器]
+        Cert[证书管理]
+        TLS[TLS处理]
+    end
+    
+    subgraph "🔍 智能分析"
+        Fingerprint[指纹识别]
+        Pattern[模式识别]
+        Cache[缓存系统]
+    end
+    
+    subgraph "🔌 扩展层"
+        Plugin[插件管理]
+        Security[安全控制]
+        Monitor[监控系统]
+    end
+    
+    %% 依赖关系
+    Proxy --> Config
+    Proxy --> Logger
+    Proxy --> Pool
+    
+    Cert --> Config
+    Cert --> Logger
+    
+    TLS --> Cert
+    TLS --> Logger
+    
+    Fingerprint --> Cache
+    Fingerprint --> Logger
+    Fingerprint --> Pool
+    
+    Pattern --> Cache
+    Pattern --> Logger
+    
+    Plugin --> Config
+    Plugin --> Logger
+    
+    Security --> Config
+    Security --> Logger
+    
+    Monitor --> Logger
+    Monitor --> Pool
+    
+    Proxy --> Fingerprint
+    Proxy --> Pattern
+    Proxy --> Plugin
+    Proxy --> Security
+    Proxy --> Monitor
+    
+    classDef core fill:#ff6b9d,stroke:#fff,stroke-width:2px,color:#fff
+    classDef network fill:#4ecdc4,stroke:#fff,stroke-width:2px,color:#fff
+    classDef intelligence fill:#96ceb4,stroke:#fff,stroke-width:2px,color:#fff
+    classDef extension fill:#45b7d1,stroke:#fff,stroke-width:2px,color:#fff
+    
+    class Config,Logger,Pool core
+    class Proxy,Cert,TLS network
+    class Fingerprint,Pattern,Cache intelligence
+    class Plugin,Security,Monitor extension
+```
+
+### 🎯 核心技术栈
+
+| 层级 | 技术组件 | 实现方案 | 性能特性 |
+|------|----------|----------|----------|
+| **并发模型** | Goroutine Pool | 工作池模式 | 10K+ 并发连接 |
+| **网络I/O** | net/http + 自定义优化 | 事件驱动 | 低延迟传输 |
+| **内存管理** | sync.Pool + 自定义池 | 零拷贝设计 | 内存复用率 >95% |
+| **缓存策略** | LRU + TTL | 分层缓存 | 命中率 >90% |
+| **数据结构** | 哈希表 + 链表 | 高效索引 | O(1) 查找复杂度 |
+| **序列化** | JSON + 二进制 | 混合编码 | 高效数据交换 |
+| **正则引擎** | RE2 + 预编译 | 安全高效 | 防ReDos攻击 |
+| **加密算法** | ECDSA P-256 | 椭圆曲线 | 高安全性能 |
+
+### 🧩 插件生态架构
+
+```mermaid
+graph TB
+    subgraph "🔌 插件类型"
+        RequestPlugin[请求插件<br/>PreProcess]
+        ResponsePlugin[响应插件<br/>PostProcess]
+        FilterPlugin[过滤插件<br/>Access Control]
+        LoggerPlugin[日志插件<br/>Audit Trail]
+        ModifierPlugin[修改插件<br/>Content Modify]
+        AnalyticsPlugin[分析插件<br/>Intelligence]
+    end
+    
+    subgraph "🎛️ 插件管理"
+        PluginLoader[插件加载器<br/>Dynamic Loading]
+        LifecycleManager[生命周期管理<br/>Start/Stop/Reload]
+        ConfigValidator[配置验证器<br/>Schema Validation]
+        DependencyResolver[依赖解析器<br/>Dependency Injection]
+    end
+    
+    subgraph "🔗 执行框架"
+        HookSystem[钩子系统<br/>Event-Driven]
+        MiddlewareChain[中间件链<br/>Pipeline Processing]
+        ErrorHandler[错误处理器<br/>Fault Tolerance]
+        MetricsCollector[指标收集器<br/>Performance Monitor]
+    end
+    
+    %% 连接关系
+    RequestPlugin --> HookSystem
+    ResponsePlugin --> HookSystem
+    FilterPlugin --> MiddlewareChain
+    LoggerPlugin --> HookSystem
+    ModifierPlugin --> MiddlewareChain
+    AnalyticsPlugin --> MetricsCollector
+    
+    PluginLoader --> LifecycleManager
+    LifecycleManager --> ConfigValidator
+    ConfigValidator --> DependencyResolver
+    
+    HookSystem --> ErrorHandler
+    MiddlewareChain --> ErrorHandler
+    MetricsCollector --> ErrorHandler
+```
+
+### 📊 指纹识别算法优化
+
+#### 三层索引算法复杂度分析：
+
+| 层级 | 算法策略 | 时间复杂度 | 空间复杂度 | 适用场景 |
+|------|----------|------------|------------|----------|
+| **第一层** | 哈希索引 | O(1) | O(N) | 精确匹配 |
+| **第二层** | 倒排索引 | O(log N) | O(N×M) | 关键词匹配 |
+| **第三层** | 线性扫描 | O(N) | O(1) | 复杂模式 |
+
+```go
+// 分层索引性能优化
+type LayeredOptimization struct {
+    // 第一层：布隆过滤器预过滤
+    BloomFilter *bloom.BloomFilter
+    
+    // 第二层：跳表加速索引
+    SkipList *skiplist.SkipList
+    
+    // 第三层：并行正则匹配
+    RegexPool *sync.Pool
+}
+```
+
+### 🔄 事件驱动架构
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+    
+    Idle --> ReceiveRequest : 客户端请求
+    ReceiveRequest --> SecurityCheck : 安全验证
+    
+    SecurityCheck --> Rejected : 验证失败
+    SecurityCheck --> PluginPreProcess : 验证通过
+    
+    PluginPreProcess --> TrafficProcess : 插件处理完成
+    TrafficProcess --> ForwardRequest : 流量处理完成
+    
+    ForwardRequest --> ReceiveResponse : 转发请求
+    ReceiveResponse --> FingerprintAnalysis : 收到响应
+    
+    FingerprintAnalysis --> PluginPostProcess : 指纹识别完成
+    PluginPostProcess --> SendResponse : 插件后处理完成
+    
+    SendResponse --> MetricsUpdate : 响应发送完成
+    MetricsUpdate --> Idle : 指标更新完成
+    
+    Rejected --> Idle : 返回错误响应
+```
+
+### 🎛️ 配置管理架构
+
+```go
+// 分层配置系统
+type ConfigurationArchitecture struct {
+    // 静态配置层
+    StaticConfig struct {
+        ServerConfig     ServerConfig     `json:"server"`
+        SecurityConfig   SecurityConfig   `json:"security"`
+        PerformanceConfig PerformanceConfig `json:"performance"`
+    }
+    
+    // 动态配置层
+    DynamicConfig struct {
+        PluginConfigs    map[string]interface{} `json:"plugins"`
+        RoutingRules     []RoutingRule          `json:"routing"`
+        SecurityRules    []SecurityRule         `json:"security_rules"`
+    }
+    
+    // 运行时配置层
+    RuntimeConfig struct {
+        ActiveConnections int64              `json:"active_connections"`
+        LoadBalancerState map[string]float64 `json:"lb_state"`
+        CircuitBreakerState map[string]bool  `json:"cb_state"`
+    }
+}
+```
+
+### 💡 设计理念与原则
+
+#### 1. **高内聚，低耦合**
+- 模块内部功能紧密相关
+- 模块间通过接口交互
+- 依赖注入实现解耦
+
+#### 2. **单一职责原则**
+- 每个模块专注一个功能领域
+- 接口设计简洁明确
+- 易于测试和维护
+
+#### 3. **开放封闭原则**
+- 对扩展开放（插件系统）
+- 对修改封闭（稳定接口）
+- 向后兼容保证
+
+#### 4. **可观测性设计**
+- 全链路追踪
+- 实时监控指标
+- 结构化日志
+
+#### 5. **容错性设计**
+- 优雅降级机制
+- 熔断器模式
+- 错误隔离
+
+### 🚀 扩展性考虑
+
+#### 水平扩展策略：
+1. **无状态设计**：服务实例间无共享状态
+2. **分布式缓存**：Redis集群支持
+3. **负载均衡**：多实例负载分担
+4. **服务发现**：动态服务注册与发现
+
+#### 垂直扩展优化：
+1. **资源池化**：连接池、对象池、协程池
+2. **并发优化**：无锁数据结构、原子操作
+3. **内存优化**：零拷贝、内存复用
+4. **I/O优化**：批量处理、管道化
 
 </div>
 
@@ -161,6 +700,8 @@ graph TB
 <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 15px; padding: 20px; margin: 20px 0;">
 
 ### 📦 一键安装
+
+#### Linux/macOS 用户
 
 ```bash
 # 克隆仓库
@@ -185,6 +726,31 @@ make plugins  # 构建插件
 # 验证服务状态
 curl http://localhost:9090/health
 ```
+
+#### Windows 用户
+
+```batch
+REM 下载预编译版本 (推荐)
+powershell -Command "Invoke-WebRequest -Uri 'https://github.com/JishiTeam-J1wa/hackmitm/releases/latest/download/hackmitm-windows-amd64.zip' -OutFile 'hackmitm.zip'"
+powershell -Command "Expand-Archive -Path 'hackmitm.zip' -DestinationPath '.' -Force"
+
+REM 智能启动脚本 (推荐)
+start.bat
+
+REM 或手动启动:
+REM 快速启动 (无插件)
+build\hackmitm.exe -config configs\config-no-plugins.json
+
+REM 完整功能 (需要Go环境构建插件)
+cd plugins && make && cd ..
+build\hackmitm.exe -config configs\config.json
+```
+
+**start.bat 脚本特性:**
+- 🎯 自动检测Go环境
+- 🔧 智能构建插件 
+- 📋 中文用户界面
+- 🛡️ 错误处理和引导
 
 ### 📋 启动方式说明
 
