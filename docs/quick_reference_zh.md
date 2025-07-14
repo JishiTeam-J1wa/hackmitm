@@ -11,10 +11,10 @@ go build -o bin/hackmitm cmd/hackmitm/main.go
 cd plugins && make examples
 
 # 运行程序
-./bin/hackmitm -config configs/config.json
+./build/hackmitm -config configs/config.json
 
 # 查看帮助
-./bin/hackmitm -h
+./build/hackmitm -h
 ```
 
 ### 插件开发

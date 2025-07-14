@@ -167,14 +167,22 @@ graph TB
 git clone https://github.com/JishiTeam-J1wa/hackmitm.git
 cd hackmitm
 
+# 下载依赖
+go mod download
+go mod tidy
+
 # 构建项目
 make build
+# 构建完成: ./build/hackmitm
 
-# 构建插件
+# 构建插件 (可选)
 make plugins
 
 # 启动服务
-./bin/hackmitm -config configs/config.json
+./build/hackmitm -config configs/config.json
+
+# 验证服务状态
+curl http://localhost:9090/health
 ```
 
 ### 🎯 Docker 部署
@@ -185,6 +193,20 @@ docker-compose up -d
 
 # 或者直接运行
 docker run -p 8081:8081 -p 9090:9090 hackmitm:latest
+```
+
+### 🌐 浏览器配置
+
+```bash
+# 配置浏览器代理
+HTTP代理: 127.0.0.1:8081
+HTTPS代理: 127.0.0.1:8081
+
+# 或使用命令行测试
+curl --proxy http://127.0.0.1:8081 https://httpbin.org/ip
+
+# 访问监控面板
+open http://localhost:9090
 ```
 
 </div>
@@ -330,10 +352,10 @@ Transfer/sec:   41.23MB
 
 ```bash
 # 自动生成 CA 证书
-./bin/hackmitm --generate-ca
+./build/hackmitm --generate-ca
 
 # 查看证书信息
-./bin/hackmitm --cert-info
+./build/hackmitm --cert-info
 ```
 
 </div>
@@ -376,7 +398,7 @@ Transfer/sec:   41.23MB
 
 ```bash
 # 启动 HTTP 代理
-./bin/hackmitm -config configs/config.json
+./build/hackmitm -config configs/config.json
 
 # 使用代理
 curl -x http://localhost:8081 https://www.example.com
@@ -386,7 +408,7 @@ curl -x http://localhost:8081 https://www.example.com
 
 ```bash
 # 启用请求日志插件
-./bin/hackmitm -config configs/config.json
+./build/hackmitm -config configs/config.json
 
 # 查看实时日志
 tail -f logs/requests.log
