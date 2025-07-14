@@ -11,9 +11,34 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Go-1.21+-00ADD8?style=for-the-badge&logo=go&logoColor=white&labelColor=00ADD8&color=00ADD8" alt="Go Version">
-  <img src="https://img.shields.io/badge/License-MIT-FF6B9D?style=for-the-badge&logo=opensourceinitiative&logoColor=white" alt="License">
+  <img src="https://img.shields.io/badge/License-Restricted-FF6B9D?style=for-the-badge&logo=opensourceinitiative&logoColor=white" alt="License">
   <img src="https://img.shields.io/badge/Platform-Multi-4ECDC4?style=for-the-badge&logo=linux&logoColor=white" alt="Platform">
   <img src="https://img.shields.io/badge/Status-Production-45B7D1?style=for-the-badge&logo=checkmarx&logoColor=white" alt="Status">
+</p>
+
+<p align="center">
+  <img src="https://github.com/JishiTeam-J1wa/hackmitm/workflows/🚀%20CI/CD%20Pipeline/badge.svg" alt="CI/CD">
+  <img src="https://goreportcard.com/badge/github.com/JishiTeam-J1wa/hackmitm" alt="Go Report Card">
+  <img src="https://github.com/JishiTeam-J1wa/hackmitm/workflows/CodeQL/badge.svg" alt="CodeQL">
+  <img src="https://codecov.io/gh/JishiTeam-J1wa/hackmitm/branch/main/graph/badge.svg" alt="Coverage">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/github/v/release/JishiTeam-J1wa/hackmitm?style=for-the-badge&logo=github&logoColor=white&labelColor=24292e&color=0366d6" alt="Latest Release">
+  <img src="https://img.shields.io/github/downloads/JishiTeam-J1wa/hackmitm/total?style=for-the-badge&logo=github&logoColor=white&labelColor=24292e&color=0366d6" alt="Total Downloads">
+  <img src="https://img.shields.io/docker/pulls/jishiteam/hackmitm?style=for-the-badge&logo=docker&logoColor=white&labelColor=2496ED&color=2496ED" alt="Docker Pulls">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/github/languages/code-size/JishiTeam-J1wa/hackmitm?style=for-the-badge&logo=github&logoColor=white&labelColor=24292e&color=28a745" alt="Code Size">
+  <img src="https://img.shields.io/github/repo-size/JishiTeam-J1wa/hackmitm?style=for-the-badge&logo=github&logoColor=white&labelColor=24292e&color=28a745" alt="Repo Size">
+  <img src="https://img.shields.io/github/last-commit/JishiTeam-J1wa/hackmitm?style=for-the-badge&logo=github&logoColor=white&labelColor=24292e&color=28a745" alt="Last Commit">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/github/contributors/JishiTeam-J1wa/hackmitm?style=for-the-badge&logo=github&logoColor=white&labelColor=24292e&color=ff6b6b" alt="Contributors">
+  <img src="https://img.shields.io/github/issues/JishiTeam-J1wa/hackmitm?style=for-the-badge&logo=github&logoColor=white&labelColor=24292e&color=ff6b6b" alt="Issues">
+  <img src="https://img.shields.io/github/issues-pr/JishiTeam-J1wa/hackmitm?style=for-the-badge&logo=github&logoColor=white&labelColor=24292e&color=ff6b6b" alt="Pull Requests">
 </p>
 
 <p align="center">
