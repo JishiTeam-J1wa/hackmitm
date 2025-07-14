@@ -447,74 +447,90 @@ type SecurityEngine struct {
 ### 🏗️ 模块依赖关系
 
 ```mermaid
-graph LR
-    subgraph "🔧 核心模块"
-        Config[配置管理]
-        Logger[日志系统]
-        Pool[内存池]
+flowchart TD
+    subgraph Core["🎯 核心基础层"]
+        direction LR
+        Config["📋 配置管理<br/><small>热加载·验证</small>"]
+        Logger["📝 日志系统<br/><small>分级·轮转</small>"] 
+        Pool["💾 内存池<br/><small>零拷贝·复用</small>"]
     end
     
-    subgraph "🚪 网络层"
-        Proxy[代理服务器]
-        Cert[证书管理]
-        TLS[TLS处理]
+    subgraph Network["🌐 网络服务层"]
+        direction LR
+        Proxy["🚪 代理服务器<br/><small>HTTP/HTTPS/WS</small>"]
+        Cert["🔐 证书管理<br/><small>自动生成·SNI</small>"]
     end
     
-    subgraph "🔍 智能分析"
-        Fingerprint[指纹识别]
-        Pattern[模式识别]
-        Cache[缓存系统]
+    subgraph Intelligence["🧠 智能分析层"]
+        direction TB
+        
+        subgraph FingerprintEngine["🔍 指纹识别引擎"]
+            direction TB
+            L1["⚡ 第一层：快速过滤 O(1)<br/><small>HTTP头索引·状态码·路径特征</small>"]
+            L2["🔍 第二层：索引查找 O(logN)<br/><small>标题关键字·内容索引·倒排表</small>"]
+            L3["🎯 第三层：深度匹配 O(N)<br/><small>正则表达式·Favicon Hash</small>"]
+            
+            L1 --> L2
+            L2 --> L3
+        end
+        
+        Pattern["📊 模式识别<br/><small>AI驱动·实时</small>"]
+        Cache["⚡ 缓存系统<br/><small>LRU·TTL·90%命中</small>"]
+        
+        FingerprintEngine -.-> Cache
+        Pattern -.-> Cache
     end
     
-    subgraph "🔌 扩展层"
-        Plugin[插件管理]
-        Security[安全控制]
-        Monitor[监控系统]
+    subgraph Extension["🔌 扩展服务层"]
+        direction LR
+        Plugin["🧩 插件管理<br/><small>动态加载·钩子</small>"]
+        Security["🛡️ 安全控制<br/><small>访问控制·攻击检测</small>"]
+        Monitor["📈 监控系统<br/><small>指标·健康检查</small>"]
     end
     
-    %% 依赖关系
-    Proxy --> Config
-    Proxy --> Logger
-    Proxy --> Pool
+    %% 简化的依赖关系 - 只显示主要流向
+    Core -.-> Network
+    Core -.-> Intelligence  
+    Core -.-> Extension
     
-    Cert --> Config
-    Cert --> Logger
+    Network --> Intelligence
+    Network --> Extension
     
-    TLS --> Cert
-    TLS --> Logger
-    
-    Fingerprint --> Cache
-    Fingerprint --> Logger
-    Fingerprint --> Pool
-    
-    Pattern --> Cache
-    Pattern --> Logger
-    
-    Plugin --> Config
-    Plugin --> Logger
-    
-    Security --> Config
-    Security --> Logger
-    
-    Monitor --> Logger
-    Monitor --> Pool
-    
-    Proxy --> Fingerprint
+    Proxy --> FingerprintEngine
     Proxy --> Pattern
     Proxy --> Plugin
     Proxy --> Security
     Proxy --> Monitor
     
-    classDef core fill:#ff6b9d,stroke:#fff,stroke-width:2px,color:#fff
-    classDef network fill:#4ecdc4,stroke:#fff,stroke-width:2px,color:#fff
-    classDef intelligence fill:#96ceb4,stroke:#fff,stroke-width:2px,color:#fff
-    classDef extension fill:#45b7d1,stroke:#fff,stroke-width:2px,color:#fff
+    %% 样式定义
+    classDef coreStyle fill:#ff6b9d,stroke:#fff,stroke-width:3px,color:#fff,font-weight:bold
+    classDef networkStyle fill:#4ecdc4,stroke:#fff,stroke-width:3px,color:#fff,font-weight:bold
+    classDef intelligenceStyle fill:#96ceb4,stroke:#fff,stroke-width:3px,color:#fff,font-weight:bold
+    classDef extensionStyle fill:#45b7d1,stroke:#fff,stroke-width:3px,color:#fff,font-weight:bold
     
-    class Config,Logger,Pool core
-    class Proxy,Cert,TLS network
-    class Fingerprint,Pattern,Cache intelligence
-    class Plugin,Security,Monitor extension
+    classDef moduleStyle fill:#f8f9fa,stroke:#495057,stroke-width:2px,color:#212529,border-radius:8px
+    
+    class Core coreStyle
+    class Network networkStyle
+    class Intelligence intelligenceStyle
+    class Extension extensionStyle
+    
+    class Config,Logger,Pool,Proxy,Cert,FingerprintEngine,Pattern,Cache,Plugin,Security,Monitor moduleStyle
+    
+    %% 指纹识别层级样式
+    classDef layerStyle fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#0d47a1,font-size:12px
+    class L1,L2,L3 layerStyle
 ```
+
+#### 🔍 指纹识别三层架构详解
+
+| 层级 | 算法复杂度 | 索引类型 | 匹配策略 | 数据结构 | 性能特点 |
+|------|-----------|----------|----------|----------|----------|
+| **第一层** | O(1) | 哈希索引 | 精确匹配 | HashMap | 毫秒级响应，快速过滤 |
+| **第二层** | O(log N) | 倒排索引 | 关键词匹配 | B+Tree + 跳表 | 高效查找，智能索引 |
+| **第三层** | O(N) | 线性扫描 | 正则/模糊匹配 | 正则表达式池 | 深度分析，全面识别 |
+
+> **🎯 识别策略**：采用**早期退出**优化，当前一层匹配到足够结果时，跳过后续层级，平均复杂度降至 **O(log N)**
 
 ### 🎯 核心技术栈
 
