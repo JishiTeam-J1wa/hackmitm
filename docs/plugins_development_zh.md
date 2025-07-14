@@ -1,414 +1,189 @@
 # HackMITM 插件开发指南
 
-HackMITM 提供了强大的动态插件系统，允许开发者扩展代理服务器的功能。本文档详细介绍如何开发、构建和部署插件。
+## 目录
+- [插件开发规范](#插件开发规范)
+- [插件目录结构](#插件目录结构)
+- [插件接口说明](#插件接口说明)
+- [插件生命周期](#插件生命周期)
+- [插件配置管理](#插件配置管理)
+- [插件开发最佳实践](#插件开发最佳实践)
+- [插件测试指南](#插件测试指南)
+- [插件发布流程](#插件发布流程)
 
-## 🏗️ 插件架构
+## 插件开发规范
 
-### 插件类型
+### 1. 插件命名规范
+- 插件目录名：使用小写字母，单词间用下划线分隔
+- 插件包名：使用小写字母，简短且有描述性
+- 插件文件名：与插件功能相关，使用下划线分隔
 
-HackMITM 支持以下类型的插件：
-
-1. **RequestPlugin** - 处理HTTP请求
-2. **ResponsePlugin** - 处理HTTP响应
-3. **FilterPlugin** - 过滤和阻止请求
-4. **LoggerPlugin** - 自定义日志记录
-5. **ModifierPlugin** - 修改请求/响应
-6. **AnalyticsPlugin** - 流量分析和统计
-
-### 插件接口
-
-所有插件必须实现基础的 `Plugin` 接口：
-
-```go
-type Plugin interface {
-    Name() string
-    Version() string
-    Description() string
-    Initialize(config map[string]interface{}) error
-    Start(ctx context.Context) error
-    Stop(ctx context.Context) error
-    Cleanup() error
-}
+### 2. 插件结构规范
+每个插件必须包含以下文件：
+```
+plugin_name/
+├── README.md           # 插件文档
+├── plugin.go          # 插件主实现
+├── config.go          # 配置结构定义
+├── handler.go         # 请求处理逻辑
+└── plugin_test.go     # 单元测试
 ```
 
-## 📝 开发插件
-
-### 1. 创建插件结构
-
+### 3. 插件接口实现
+每个插件必须实现以下接口：
 ```go
-package main
+// NewPlugin 创建插件实例（必需）
+func NewPlugin(config map[string]interface{}) (plugin.Plugin, error)
 
-import (
-    "context"
-    "net/http"
-    "hackmitm/pkg/plugin"
-    "hackmitm/pkg/logger"
-)
-
-// MyPlugin 自定义插件
-type MyPlugin struct {
+// 根据插件类型实现对应接口
+type YourPlugin struct {
     *plugin.BasePlugin
-    // 添加自定义字段
+    // 插件特定字段
 }
 
-// NewPlugin 插件工厂函数（必需）
-func NewPlugin(config map[string]interface{}) (plugin.Plugin, error) {
-    base := plugin.NewBasePlugin("my-plugin", "1.0.0", "我的自定义插件")
-    
-    p := &MyPlugin{
-        BasePlugin: base,
-    }
-    
-    return p, nil
-}
+// 必需方法
+func (p *YourPlugin) Initialize(config map[string]interface{}) error
+func (p *YourPlugin) Start(ctx context.Context) error
+func (p *YourPlugin) Stop(ctx context.Context) error
+func (p *YourPlugin) Cleanup() error
 ```
 
-### 2. 实现特定插件类型
+### 4. 错误处理规范
+- 所有错误必须返回有意义的错误信息
+- 使用 errors.Wrap 包装错误以保留调用栈
+- 关键错误必须记录日志
+- 避免吞掉错误
 
-#### 请求处理插件
+### 5. 配置管理
+- 配置项必须有默认值
+- 配置项必须有类型检查
+- 配置项必须有验证逻辑
+- 配置变更必须优雅处理
 
+### 6. 资源管理
+- 所有资源必须在 Cleanup 中释放
+- 使用 context 控制协程生命周期
+- 使用 sync.WaitGroup 等待资源释放
+- 避免资源泄露
+
+## 插件生命周期
+
+1. 初始化阶段
 ```go
-// Priority 返回插件优先级
-func (p *MyPlugin) Priority() int {
-    return p.GetConfigInt("priority", 100)
-}
+func (p *YourPlugin) Initialize(config map[string]interface{}) error {
+    // 1. 加载配置
+    if err := p.loadConfig(config); err != nil {
+        return fmt.Errorf("加载配置失败: %w", err)
+    }
 
-// ProcessRequest 处理HTTP请求
-func (p *MyPlugin) ProcessRequest(req *http.Request, ctx *plugin.RequestContext) error {
-    logger.Infof("处理请求: %s %s", req.Method, req.URL.String())
-    
-    // 在这里添加请求处理逻辑
-    
+    // 2. 验证配置
+    if err := p.validateConfig(); err != nil {
+        return fmt.Errorf("配置验证失败: %w", err)
+    }
+
+    // 3. 初始化资源
+    if err := p.initResources(); err != nil {
+        return fmt.Errorf("初始化资源失败: %w", err)
+    }
+
     return nil
 }
 ```
 
-#### 过滤插件
-
+2. 启动阶段
 ```go
-// ShouldAllow 判断是否允许请求通过
-func (p *MyPlugin) ShouldAllow(req *http.Request, ctx *plugin.FilterContext) (bool, error) {
-    // 在这里添加过滤逻辑
-    
-    if req.URL.Path == "/blocked" {
-        return false, nil // 阻止请求
-    }
-    
-    return true, nil // 允许请求
-}
-```
+func (p *YourPlugin) Start(ctx context.Context) error {
+    // 1. 启动后台任务
+    p.startBackgroundTasks(ctx)
 
-#### 分析插件
+    // 2. 注册处理器
+    p.registerHandlers()
 
-```go
-// AnalyzeRequest 分析请求
-func (p *MyPlugin) AnalyzeRequest(req *http.Request, ctx *plugin.RequestContext) (*plugin.AnalysisResult, error) {
-    result := &plugin.AnalysisResult{
-        Threat:      false,
-        ThreatLevel: "none",
-        Description: "正常请求",
-        Confidence:  1.0,
-        Timestamp:   time.Now(),
-        Metadata:    make(map[string]interface{}),
-    }
-    
-    // 在这里添加分析逻辑
-    
-    return result, nil
-}
+    // 3. 准备就绪
+    p.markAsReady()
 
-// GetStatistics 获取统计信息
-func (p *MyPlugin) GetStatistics() map[string]interface{} {
-    return map[string]interface{}{
-        "processed_requests": p.processedCount,
-        "plugin_version":     p.Version(),
-    }
-}
-```
-
-### 3. 配置处理
-
-```go
-// Initialize 初始化插件
-func (p *MyPlugin) Initialize(config map[string]interface{}) error {
-    if err := p.BasePlugin.Initialize(config); err != nil {
-        return err
-    }
-    
-    // 读取配置
-    p.enabled = p.GetConfigBool("enabled", true)
-    p.threshold = p.GetConfigInt("threshold", 100)
-    p.apiKey = p.GetConfigString("api_key", "")
-    
-    logger.Infof("插件 %s 初始化完成", p.Name())
     return nil
 }
 ```
 
-## 🔧 构建插件
-
-### 1. 插件目录结构
-
-```
-plugins/
-├── examples/
-│   ├── my_plugin.go          # 插件源码
-│   └── my_plugin.so          # 编译后的插件
-├── Makefile                  # 构建脚本
-└── build.sh                  # 构建助手脚本
-```
-
-### 2. 构建命令
-
-#### 单个插件构建
-
-```bash
-go build -buildmode=plugin -o my_plugin.so my_plugin.go
-```
-
-#### 使用构建脚本
-
-创建 `build.sh` 脚本：
-
-```bash
-#!/bin/bash
-
-PLUGIN_NAME=$1
-if [ -z "$PLUGIN_NAME" ]; then
-    echo "使用方法: ./build.sh <plugin_name>"
-    exit 1
-fi
-
-echo "构建插件: $PLUGIN_NAME"
-go build -buildmode=plugin -o "examples/${PLUGIN_NAME}.so" "examples/${PLUGIN_NAME}.go"
-
-if [ $? -eq 0 ]; then
-    echo "插件构建成功: examples/${PLUGIN_NAME}.so"
-else
-    echo "插件构建失败"
-    exit 1
-fi
-```
-
-### 3. Makefile
-
-```makefile
-.PHONY: all clean request-logger traffic-stats sql-detector
-
-# 构建所有插件
-all: request-logger traffic-stats sql-detector
-
-# 单个插件构建
-request-logger:
-	go build -buildmode=plugin -o examples/request_logger.so examples/request_logger.go
-
-traffic-stats:
-	go build -buildmode=plugin -o examples/traffic_stats.so examples/traffic_stats.go
-
-sql-detector:
-	go build -buildmode=plugin -o examples/sql_injection_detector.so examples/sql_injection_detector.go
-
-# 清理构建文件
-clean:
-	rm -f examples/*.so
-
-# 安装插件到指定目录
-install: all
-	mkdir -p $(DESTDIR)/plugins/examples
-	cp examples/*.so $(DESTDIR)/plugins/examples/
-```
-
-## ⚙️ 配置插件
-
-### 1. 在配置文件中添加插件
-
-编辑 `configs/config.json`：
-
-```json
-{
-  "plugins": {
-    "enabled": true,
-    "base_path": "./plugins",
-    "auto_load": true,
-    "plugins": [
-      {
-        "name": "my-plugin",
-        "enabled": true,
-        "path": "examples/my_plugin.so",
-        "priority": 100,
-        "config": {
-          "api_key": "your-api-key",
-          "threshold": 50,
-          "enable_debug": false
-        }
-      }
-    ]
-  }
-}
-```
-
-### 2. 配置项说明
-
-- `enabled`: 是否启用插件系统
-- `base_path`: 插件基础路径
-- `auto_load`: 是否自动加载插件
-- `plugins`: 插件列表
-  - `name`: 插件名称
-  - `enabled`: 是否启用该插件
-  - `path`: 插件文件路径（相对于base_path）
-  - `priority`: 优先级（数字越小优先级越高）
-  - `config`: 插件特定配置
-
-## 🚀 部署和测试
-
-### 1. 部署插件
-
-```bash
-# 构建插件
-make my-plugin
-
-# 复制到插件目录
-cp examples/my_plugin.so /path/to/hackmitm/plugins/examples/
-
-# 更新配置文件
-# 重启HackMITM
-```
-
-### 2. 测试插件
-
-```bash
-# 启动HackMITM，查看插件加载情况
-./hackmitm --config=./configs/config.json --verbose
-
-# 检查插件状态
-curl http://localhost:9090/status
-
-# 查看插件统计
-curl http://localhost:9090/metrics
-```
-
-### 3. 调试插件
-
-```bash
-# 启用详细日志
-./hackmitm --log-level=debug
-
-# 禁用特定插件进行测试
-# 在配置文件中设置 "enabled": false
-
-# 完全禁用插件系统
-./hackmitm --disable-plugins
-```
-
-## 📋 最佳实践
-
-### 1. 错误处理
-
+3. 停止阶段
 ```go
-func (p *MyPlugin) ProcessRequest(req *http.Request, ctx *plugin.RequestContext) error {
-    defer func() {
-        if r := recover(); r != nil {
-            logger.Errorf("插件 %s 崩溃: %v", p.Name(), r)
-        }
-    }()
-    
-    // 插件逻辑
+func (p *YourPlugin) Stop(ctx context.Context) error {
+    // 1. 停止接收新请求
+    p.stopAcceptingRequests()
+
+    // 2. 等待现有请求处理完成
+    p.waitForRequestsToComplete()
+
+    // 3. 停止后台任务
+    p.stopBackgroundTasks()
+
     return nil
 }
 ```
 
-### 2. 性能优化
+## 插件开发最佳实践
 
-- 使用原子操作进行计数器操作
-- 避免在插件中执行耗时操作
-- 合理使用缓存减少重复计算
-- 使用连接池管理外部资源
+### 1. 性能优化
+- 使用对象池减少内存分配
+- 避免不必要的字符串拼接
+- 合理使用 goroutine
+- 注意锁的粒度
 
-### 3. 内存管理
+### 2. 稳定性保证
+- 实现健康检查
+- 添加监控指标
+- 实现优雅降级
+- 添加熔断机制
+- 实现请求限流
 
-```go
-func (p *MyPlugin) Cleanup() error {
-    // 清理资源
-    if p.httpClient != nil {
-        p.httpClient.CloseIdleConnections()
-    }
-    
-    if p.file != nil {
-        p.file.Close()
-    }
-    
-    return p.BasePlugin.Cleanup()
-}
-```
+### 3. 可观测性
+- 使用结构化日志
+- 添加关键指标
+- 实现分布式追踪
+- 提供调试接口
 
-### 4. 线程安全
+### 4. 安全性
+- 验证所有输入
+- 避免敏感信息泄露
+- 实现访问控制
+- 注意并发安全
 
-```go
-type MyPlugin struct {
-    *plugin.BasePlugin
-    mutex sync.RWMutex
-    data  map[string]interface{}
-}
+## 插件测试指南
 
-func (p *MyPlugin) updateData(key string, value interface{}) {
-    p.mutex.Lock()
-    defer p.mutex.Unlock()
-    p.data[key] = value
-}
-```
+### 1. 单元测试
+- 测试所有公开接口
+- 测试错误处理
+- 测试边界条件
+- 使用 mock 对象
 
-## 🔍 故障排除
+### 2. 集成测试
+- 测试插件生命周期
+- 测试配置变更
+- 测试并发场景
+- 测试资源管理
 
-### 常见问题
+### 3. 性能测试
+- 测试内存使用
+- 测试 CPU 使用
+- 测试并发性能
+- 测试长期稳定性
 
-1. **插件加载失败**
-   - 检查插件文件路径是否正确
-   - 确认插件文件权限
-   - 验证Go版本兼容性
+## 插件发布流程
 
-2. **插件初始化失败**
-   - 检查配置格式是否正确
-   - 验证必需的配置项
-   - 查看详细错误日志
+1. 版本管理
+- 遵循语义化版本
+- 维护更新日志
+- 标记发布版本
+- 更新文档
 
-3. **插件运行时错误**
-   - 启用详细日志模式
-   - 检查插件中的错误处理
-   - 验证外部依赖可用性
+2. 质量检查
+- 运行所有测试
+- 执行代码审查
+- 检查代码覆盖率
+- 进行性能测试
 
-### 调试技巧
-
-```bash
-# 检查插件符号
-nm -D examples/my_plugin.so | grep -E "(NewPlugin|LoadPlugin)"
-
-# 验证插件格式
-file examples/my_plugin.so
-
-# 查看插件依赖
-ldd examples/my_plugin.so
-```
-
-## 📚 示例插件
-
-参考 `plugins/examples/` 目录中的示例插件：
-
-- `request_logger.go` - 请求日志插件
-- `traffic_stats.go` - 流量统计插件
-- `sql_injection_detector.go` - SQL注入检测插件
-
-这些示例展示了不同类型插件的完整实现。
-
-## 🤝 贡献
-
-欢迎提交插件到HackMITM项目！请遵循以下步骤：
-
-1. Fork项目仓库
-2. 创建功能分支
-3. 开发和测试插件
-4. 提交Pull Request
-5. 更新文档
-
----
-
-更多信息请访问 [HackMITM GitHub 仓库](https://github.com/JishiTeam-J1wa/hackmitm) 
+3. 发布步骤
+- 打包插件
+- 生成校验和
+- 更新仓库
+- 发布公告 

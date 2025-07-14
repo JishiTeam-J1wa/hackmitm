@@ -22,8 +22,8 @@
   },
   "security": {
     "enable_auth": false,
-    "username": "",
-    "password": "",
+    "username": "admin",
+    "password": "password",
     "whitelist": [],
     "blacklist": [],
     "rate_limit": {
@@ -41,10 +41,70 @@
     }
   },
   "plugins": {
-    "enabled": false,
+    "enabled": true,
     "base_path": "./plugins",
     "auto_load": true,
-    "plugins": []
+    "plugins": [
+      {
+        "name": "request-logger",
+        "enabled": true,
+        "path": "examples/request_logger.so",
+        "priority": 100,
+        "config": {
+          "enable_debug": true,
+          "log_level": "debug",
+          "log_format": "detailed",
+          "log_file": "./logs/requests.log"
+        }
+      },
+      {
+        "name": "stats",
+        "enabled": true,
+        "path": "examples/stats_plugin.so",
+        "priority": 1000,
+        "config": {
+          "enable_debug": true,
+          "log_interval": 60
+        }
+      },
+      {
+        "name": "security",
+        "enabled": true,
+        "path": "examples/security_plugin.so",
+        "priority": 50,
+        "config": {
+          "enable_debug": true,
+          "sql_injection_check": true,
+          "xss_check": true,
+          "path_traversal_check": true,
+          "command_injection_check": true,
+          "sensitive_file_check": true,
+          "blacklist_paths": [
+            "/admin/",
+            "/wp-admin/",
+            "/.git/"
+          ],
+          "blacklist_ips": [],
+          "rate_limit": {
+            "enabled": true,
+            "max_requests": 100,
+            "time_window": 60
+          }
+        }
+      },
+      {
+        "name": "simple-plugin",
+        "enabled": true,
+        "path": "examples/simple_plugin.so",
+        "priority": 200,
+        "config": {
+          "enable_debug": true,
+          "log_level": "debug",
+          "max_requests": 1000,
+          "custom_header": "SimplePlugin/1.0"
+        }
+      }
+    ]
   },
   "logging": {
     "level": "debug",

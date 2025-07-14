@@ -174,13 +174,7 @@ func (m *Manager) initializePlugin(config *PluginConfig, pluginInstance Plugin, 
 	// 存储配置
 	m.config[config.Name] = config
 
-	// 启动插件
-	if err := m.StartPlugin(config.Name); err != nil {
-		logger.Errorf("启动插件失败: %v", err)
-		return err
-	}
-
-	logger.Infof("插件加载并启动成功: %s v%s", wrapper.Info.Name, wrapper.Info.Version)
+	logger.Infof("插件加载成功: %s v%s", wrapper.Info.Name, wrapper.Info.Version)
 	return nil
 }
 
