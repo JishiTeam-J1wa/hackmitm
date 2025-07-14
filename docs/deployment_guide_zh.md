@@ -602,9 +602,22 @@ tar -czf hackmitm-logs-$(date +%Y%m%d).tar.gz /var/log/hackmitm/
 
 ## 📞 支持和联系
 
+<div align="center" style="margin: 20px 0;">
+
+### 💬 微信联系
+
+<img src="../images/wechat_qr.png" alt="微信二维码" width="150" height="150" style="border-radius: 8px;">
+
+**微信号: Whoisj1wa**
+
+*扫码添加微信好友，获得部署技术支持*
+
+</div>
+
+**其他联系方式**:
 - **文档**: https://github.com/JishiTeam-J1wa/hackmitm/docs
 - **问题反馈**: https://github.com/JishiTeam-J1wa/hackmitm/issues
-- **邮箱**: admin@jishiteam.com
+- **微信**: Whoisj1wa
 
 ---
 

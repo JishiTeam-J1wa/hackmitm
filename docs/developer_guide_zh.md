@@ -582,10 +582,23 @@ tail -f logs/hackmitm.log
 
 ## 📞 支持和联系
 
+<div align="center" style="margin: 20px 0;">
+
+### 💬 微信联系
+
+<img src="../images/wechat_qr.png" alt="微信二维码" width="150" height="150" style="border-radius: 8px;">
+
+**微信号: Whoisj1wa**
+
+*扫码添加微信好友，获得开发技术支持*
+
+</div>
+
+**其他联系方式**:
 - **项目主页**：https://github.com/JishiTeam-J1wa/hackmitm
 - **文档**：https://github.com/JishiTeam-J1wa/hackmitm/docs
 - **Issue报告**：https://github.com/JishiTeam-J1wa/hackmitm/issues
-- **邮箱**：admin@jishiteam.com
+- **微信**：Whoisj1wa
 
 ---
 

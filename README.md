@@ -19,7 +19,7 @@
 <p align="center">
   <img src="https://github.com/JishiTeam-J1wa/hackmitm/workflows/🚀%20CI/CD%20Pipeline/badge.svg" alt="CI/CD">
   <img src="https://goreportcard.com/badge/github.com/JishiTeam-J1wa/hackmitm" alt="Go Report Card">
-  <img src="https://github.com/JishiTeam-J1wa/hackmitm/workflows/CodeQL/badge.svg" alt="CodeQL">
+  <img src="https://github.com/JishiTeam-J1wa/hackmitm/actions/workflows/codeql.yml/badge.svg" alt="CodeQL">
   <img src="https://codecov.io/gh/JishiTeam-J1wa/hackmitm/branch/main/graph/badge.svg" alt="Coverage">
 </p>
 
@@ -53,6 +53,9 @@
   </a>
   <a href="#-文档" style="text-decoration: none;">
     <img src="https://img.shields.io/badge/📖_文档-4ECDC4?style=for-the-badge&logoColor=white" alt="Documentation">
+  </a>
+  <a href="docs/bug_solutions_zh.md" style="text-decoration: none;">
+    <img src="https://img.shields.io/badge/🐛_Bug解决-FFA500?style=for-the-badge&logoColor=white" alt="Bug Solutions">
   </a>
   <a href="#-示例" style="text-decoration: none;">
     <img src="https://img.shields.io/badge/💡_示例-45B7D1?style=for-the-badge&logoColor=white" alt="Examples">
@@ -576,10 +579,47 @@ MIT License - 自由使用、修改和分发
 
 ---
 
+## 📞 联系我们
+
+<div align="center" style="margin: 30px 0;">
+  
+### 💬 微信联系
+
+<table>
+<tr>
+<td align="center">
+<img src="images/wechat_qr.png" alt="微信二维码" width="200" height="200" style="border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+<br>
+<strong>微信号: Whoisj1wa</strong>
+<br>
+<em>扫码添加微信好友</em>
+</td>
+<td align="center" style="padding-left: 30px;">
+<h4>🚀 快速联系方式</h4>
+<ul style="text-align: left; list-style: none; padding: 0;">
+<li>📱 <strong>微信</strong>: Whoisj1wa</li>
+<li>🐛 <strong>Bug报告</strong>: <a href="https://github.com/JishiTeam-J1wa/hackmitm/issues">GitHub Issues</a></li>
+<li>📖 <strong>文档</strong>: <a href="docs/">项目文档</a></li>
+<li>🔧 <strong>Bug解决</strong>: <a href="docs/bug_solutions_zh.md">解决方案中心</a></li>
+</ul>
+<br>
+<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; padding: 10px; color: white;">
+<strong>⚡ 响应时间</strong><br>
+工作日: 9:00-18:00<br>
+周末: 紧急问题处理
+</div>
+</td>
+</tr>
+</table>
+
+</div>
+
+---
+
 <p style="color: #666; font-size: 14px;">
   Made with ❤️ by <a href="https://github.com/JishiTeam-J1wa" style="color: #667eea;">JishiTeam-J1wa</a> | 
   © 2024 HackMITM | 
-  <a href="mailto:contact@jishiteam.com" style="color: #667eea;">联系我们</a>
+  <a href="https://weixin.qq.com/r/Whoisj1wa" style="color: #667eea;">技术支持</a>
 </p>
 
 </div> 
