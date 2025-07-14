@@ -175,12 +175,14 @@ go mod tidy
 make build
 # 构建完成: ./build/hackmitm
 
-# 构建插件 (可选)
+# 构建插件 (源代码目录下可构建)
 make plugins
 
 # 启动服务
 ./build/hackmitm -config configs/config.json
 
+# 推荐使用 无插件启动
+./hackmitm -config configs/config-no-plugins.json
 # 验证服务状态
 curl http://localhost:9090/health
 ```
