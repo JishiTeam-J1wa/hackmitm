@@ -4,7 +4,6 @@
 *.dll
 *.so
 *.dylib
-hackmitm
 bin/
 
 # 测试生成的证书和密钥
@@ -88,4 +87,4 @@ target/
 
 # 运行时文件
 *.pid
-*.lock 
+*.lock
