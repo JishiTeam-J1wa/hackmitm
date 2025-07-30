@@ -356,9 +356,11 @@ func (li *LayeredIndex) regexMatchRule(response *HTTPResponse, rule *Fingerprint
 }
 
 // faviconMatchRule Favicon匹配规则（第三层）
-func (li *LayeredIndex) faviconMatchRule(response *HTTPResponse, rule *FingerprintRule) bool {
+func (li *LayeredIndex) faviconMatchRule(_ *HTTPResponse, _ *FingerprintRule) bool {
 	// 这里可以实现favicon匹配逻辑
 	// 为了保持性能，可以简化或异步处理
+	// TODO: 实现favicon匹配逻辑
+	// 参数response和rule将在未来的实现中使用
 	return false // 暂时返回false，避免性能影响
 }
 
