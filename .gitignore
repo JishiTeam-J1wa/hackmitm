@@ -1,0 +1,91 @@
+# 编译生成的文件
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+hackmitm
+bin/
+
+# 测试生成的证书和密钥
+/certs/*.pem
+/certs/*.crt
+/certs/*.key
+/ca.crt
+*.p12
+*.pfx
+
+# 日志文件
+/logs/*
+!logs/.gitkeep
+*.log
+
+# 配置文件中的敏感信息
+config.local.json
+*.env
+.env.local
+.env.production
+
+# IDE和编辑器文件
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.vim/
+.emacs.d/
+
+# 操作系统文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# 依赖目录
+/vendor/
+/dist/
+node_modules/
+
+# 临时文件
+*.tmp
+*.temp
+*.bak
+*.backup
+*.orig
+
+# 调试文件
+debug
+*.debug
+debug.test
+*.test
+*.prof
+
+# 构建输出
+build/
+out/
+target/
+
+# 文档生成
+*.pdf
+*.docx
+
+# 压缩文件
+*.zip
+*.tar.gz
+*.rar
+
+# 数据库文件
+*.db
+*.sqlite
+*.sqlite3
+
+# 缓存文件
+*.cache
+.cache/
+
+# 运行时文件
+*.pid
+*.lock 

@@ -1,0 +1,136 @@
+{
+  "server": {
+    "listen_port": 8081,
+    "listen_addr": "0.0.0.0",
+    "read_timeout": 30000000000,
+    "write_timeout": 30000000000
+  },
+  "tls": {
+    "cert_dir": "./certs",
+    "ca_key_file": "./certs/ca-key.pem",
+    "ca_cert_file": "./certs/ca-cert.pem",
+    "enable_cert_cache": true,
+    "cert_cache_ttl": 86400000000000
+  },
+  "proxy": {
+    "enable_http": true,
+    "enable_https": true,
+    "enable_websocket": true,
+    "upstream_timeout": 30000000000,
+    "max_idle_conns": 100,
+    "enable_compression": false
+  },
+  "security": {
+    "enable_auth": false,
+    "username": "admin",
+    "password": "your_secure_password_here",
+    "whitelist": [],
+    "blacklist": [],
+    "rate_limit": {
+      "enabled": true,
+      "max_requests": 1000,
+      "window": 60000000000
+    }
+  },
+  "monitoring": {
+    "enabled": true,
+    "port": 9090,
+    "health_checks": {
+      "memory_limit_mb": 512,
+      "max_goroutines": 10000
+    }
+  },
+  "plugins": {
+    "enabled": true,
+    "base_path": "./plugins",
+    "auto_load": true,
+    "plugins": [
+      {
+        "name": "request-logger",
+        "enabled": true,
+        "path": "examples/request_logger.so",
+        "priority": 100,
+        "config": {
+          "enable_debug": true,
+          "log_level": "debug",
+          "log_format": "detailed",
+          "log_file": "./logs/requests.log"
+        }
+      },
+      {
+        "name": "stats",
+        "enabled": true,
+        "path": "examples/stats_plugin.so",
+        "priority": 1000,
+        "config": {
+          "enable_debug": true,
+          "log_interval": 60
+        }
+      },
+      {
+        "name": "security",
+        "enabled": true,
+        "path": "examples/security_plugin.so",
+        "priority": 50,
+        "config": {
+          "enable_debug": true,
+          "sql_injection_check": true,
+          "xss_check": true,
+          "path_traversal_check": true,
+          "command_injection_check": true,
+          "sensitive_file_check": true,
+          "blacklist_paths": [
+            "/admin/",
+            "/wp-admin/",
+            "/.git/"
+          ],
+          "blacklist_ips": [],
+          "rate_limit": {
+            "enabled": true,
+            "max_requests": 100,
+            "time_window": 60
+          }
+        }
+      },
+      {
+        "name": "simple-plugin",
+        "enabled": true,
+        "path": "examples/simple_plugin.so",
+        "priority": 200,
+        "config": {
+          "enable_debug": true,
+          "log_level": "debug",
+          "max_requests": 1000,
+          "custom_header": "SimplePlugin/1.0"
+        }
+      }
+    ]
+  },
+  "logging": {
+    "level": "debug",
+    "output": "stdout",
+    "format": "text",
+    "enable_file_rotation": false
+  },
+  "performance": {
+    "max_goroutines": 10000,
+    "buffer_size": 4096,
+    "enable_pprof": false,
+    "pprof_port": 6060
+  },
+  "pattern_recognition": {
+    "enabled": true,
+    "confidence_threshold": 0.6,
+    "cache_size": 1000,
+    "cache_ttl": 300
+  },
+  "fingerprint": {
+    "enabled": true,
+    "fingerprint_path": "configs/finger.json",
+    "cache_size": 2000,
+    "cache_ttl": 1800,
+    "favicon_timeout": 10,
+    "use_layered_index": true,
+    "max_matches": 10
+  }
+} 
