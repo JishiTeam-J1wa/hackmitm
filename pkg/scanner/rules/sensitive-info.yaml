@@ -1,0 +1,50 @@
+# Sensitive Information Exposure Detection Rule
+id: sensitive-info-exposure
+name: 敏感信息泄露
+description: 检测响应中的敏感信息泄露，如身份证、手机号、邮箱等
+severity: medium
+enabled: true
+priority: 70
+tags:
+  - information-disclosure
+  - pii
+  - data-leak
+matchers:
+  - part: response
+    type: regex
+    patterns:
+      # 中国身份证号
+      - "[1-9]\\d{5}(18|19|20)\\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\\d|3[01])\\d{3}[0-9Xx]"
+      # 中国手机号
+      - "(?i)(mobile|phone|tel|手机|电话)[\":\\s]*1[3-9]\\d{9}"
+      - "\\b1[3-9]\\d{9}\\b"
+      # 邮箱地址
+      - "(?i)(email|邮箱|邮件)[\":\\s]*[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}"
+      # 银行卡号
+      - "\\b[1-9]\\d{15,18}\\b"
+      # API密钥模式
+      - "(?i)(api[_-]?key|apikey|secret[_-]?key|access[_-]?token)[\":\\s]*[a-zA-Z0-9_-]{16,}"
+      # AWS密钥
+      - "AKIA[0-9A-Z]{16}"
+      # JWT Token
+      - "eyJ[a-zA-Z0-9_-]*\\.eyJ[a-zA-Z0-9_-]*\\.[a-zA-Z0-9_-]*"
+      # 密码字段
+      - "(?i)(password|passwd|pwd)[\":\\s]*[^\"\\s]{6,}"
+      # 数据库连接字符串
+      - "(?i)(mysql|postgres|mongodb|redis)://[^\\s]+"
+  - part: response
+    type: contains
+    patterns:
+      - "\"password\""
+      - "\"secret\""
+      - "\"token\""
+      - "\"private_key\""
+condition: or
+remediation: |
+  1. 在生产环境中禁用详细错误消息
+  2. 对敏感数据进行脱敏处理后再返回
+  3. 实施数据最小化原则，只返回必要的数据
+  4. 使用加密存储敏感信息
+  5. 定期审计 API 响应内容
+references:
+  - https://owasp.org/www-community/vulnerabilities/Information_exposure_through_query_strings_in_GET_request

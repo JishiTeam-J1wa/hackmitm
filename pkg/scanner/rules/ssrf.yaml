@@ -1,0 +1,46 @@
+# Server-Side Request Forgery (SSRF) Detection Rule
+id: ssrf
+name: 服务端请求伪造
+description: 检测可能导致 SSRF 的请求参数
+severity: high
+enabled: true
+priority: 80
+tags:
+  - ssrf
+  - injection
+  - owasp-top10
+matchers:
+  - part: params
+    type: regex
+    patterns:
+      # 内网 IP 地址
+      - "(?i)(10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3})"
+      - "(?i)(172\\.(1[6-9]|2[0-9]|3[01])\\.\\d{1,3}\\.\\d{1,3})"
+      - "(?i)(192\\.168\\.\\d{1,3}\\.\\d{1,3})"
+      - "(?i)(127\\.0\\.0\\.1|localhost)"
+      # 云元数据地址
+      - "(?i)169\\.254\\.169\\.254"
+      - "(?i)metadata\\.google"
+      - "(?i)metadata\\.azure"
+      # 特殊协议
+      - "(?i)^file://"
+      - "(?i)^gopher://"
+      - "(?i)^dict://"
+      - "(?i)^ftp://"
+      # URL 参数中可能指向内部资源
+      - "(?i)(url|uri|target|dest|redirect|site|link|domain)[\":\\s]*https?://(10|172|192|127|169|localhost)"
+  - part: url
+    type: regex
+    patterns:
+      - "(?i)url=.*?(10\\.\\d|172\\.(1[6-9]|2)|192\\.168|127\\.|localhost)"
+      - "(?i)callback=.*?(10\\.\\d|172\\.(1[6-9]|2)|192\\.168|127\\.|localhost)"
+condition: or
+remediation: |
+  1. 实施严格的 URL 白名单验证
+  2. 禁止访问内网 IP 地址和云元数据服务
+  3. 在网络层面限制出站连接
+  4. 使用专门的 SSRF 过滤库
+  5. 不要将用户输入直接用于 URL 构造
+references:
+  - https://owasp.org/www-community/attacks/Server_Side_Request_Forgery
+  - https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html

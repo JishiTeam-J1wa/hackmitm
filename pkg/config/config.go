@@ -409,8 +409,19 @@ func (c *Config) Reload() error {
 		return fmt.Errorf("重新加载配置失败: %w", err)
 	}
 
-	// 更新配置
-	*c = *newConfig
+	// 更新配置（逐字段复制，避免复制 mutex）
+	c.Server = newConfig.Server
+	c.TLS = newConfig.TLS
+	c.Proxy = newConfig.Proxy
+	c.Security = newConfig.Security
+	c.Monitoring = newConfig.Monitoring
+	c.Plugins = newConfig.Plugins
+	c.Logging = newConfig.Logging
+	c.Performance = newConfig.Performance
+	c.PatternRecognition = newConfig.PatternRecognition
+	c.Fingerprint = newConfig.Fingerprint
+	c.lastMod = newConfig.lastMod
+	// 注意：不复制 mu (mutex) 和 filePath
 	logger.Info("配置已重新加载")
 	return nil
 }

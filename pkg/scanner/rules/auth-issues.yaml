@@ -1,0 +1,53 @@
+# Authentication and Authorization Issues Detection Rule
+id: auth-issues
+name: 认证授权问题
+description: 检测认证和授权相关的问题
+severity: high
+enabled: true
+priority: 95
+tags:
+  - authentication
+  - authorization
+  - owasp-top10
+matchers:
+  - part: response
+    type: regex
+    patterns:
+      # 弱密码哈希
+      - "(?i)(md5|sha1)[(\\s]*password"
+      # 明文密码
+      - "(?i)password[\":\\s]*[\"'][^\"']{1,20}[\"']"
+      # Session ID 泄露
+      - "(?i)session[_-]?id[\":\\s]*[\"'][^\"']+[\"']"
+  - part: headers
+    type: regex
+    patterns:
+      # 弱认证头
+      - "(?i)authorization:\\s*basic\\s+[a-zA-Z0-9+/=]+"
+      # 敏感 Cookie 缺少安全属性
+      - "(?i)set-cookie:.*(?:session|auth|token).*?(?:;\\s*(?!secure|httponly))"
+  - part: response
+    type: contains
+    patterns:
+      - "\"authenticated\":true"
+      - "\"authorized\":true"
+      - "\"admin\":true"
+      - "\"role\":\"admin\""
+      - "\"access\":\"granted\""
+  - part: url
+    type: regex
+    patterns:
+      # 敏感端点无需认证
+      - "(?i)/(admin|manager|config|settings|user|account|profile)(/|$)"
+      - "(?i)/(backup|dump|export|import)(/|$)"
+condition: or
+remediation: |
+  1. 使用强密码哈希算法（如 bcrypt, scrypt, argon2）
+  2. 实施多因素认证 (MFA)
+  3. 对所有敏感端点强制认证检查
+  4. 使用安全的 Session 管理
+  5. 实施基于角色的访问控制 (RBAC)
+  6. 对管理功能实施额外的认证层
+references:
+  - https://owasp.org/www-community/vulnerabilities/Broken_Authentication
+  - https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html

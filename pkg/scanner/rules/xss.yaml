@@ -1,0 +1,42 @@
+# Cross-Site Scripting (XSS) Detection Rule
+id: xss-reflected
+name: Reflected XSS
+description: 检测响应中反射的跨站脚本攻击
+severity: high
+enabled: true
+priority: 90
+tags:
+  - xss
+  - injection
+  - owasp-top10
+matchers:
+  - part: params
+    type: regex
+    patterns:
+      - "(?i)<script[^>]*>.*</script>"
+      - "(?i)javascript\\s*:"
+      - "(?i)on(error|load|click|mouse|focus|blur|key|submit|change)\\s*="
+      - "(?i)<img[^>]+onerror\\s*="
+      - "(?i)<svg[^>]+onload\\s*="
+      - "(?i)<iframe[^>]*src\\s*="
+      - "(?i)<body[^>]+onload\\s*="
+      - "(?i)<input[^>]+onfocus\\s*="
+      - "(?i)<marquee[^>]+onstart\\s*="
+      - "(?i)expression\\s*\\("
+      - "(?i)eval\\s*\\("
+      - "(?i)document\\.(cookie|location|write)"
+      - "(?i)window\\.(location|open)"
+  - part: response
+    type: regex
+    patterns:
+      - "(?i)<script[^>]*>.*</script>"
+condition: or
+remediation: |
+  1. 对所有用户输入进行 HTML 实体编码
+  2. 使用内容安全策略 (CSP) 头
+  3. 设置 HttpOnly 和 Secure Cookie 标志
+  4. 使用现代前端框架的自动转义功能
+  5. 实施输入验证和白名单过滤
+references:
+  - https://owasp.org/www-community/attacks/xss/
+  - https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html

@@ -16,8 +16,10 @@ import (
 	"hackmitm/pkg/cert"
 	"hackmitm/pkg/config"
 	"hackmitm/pkg/logger"
+	"hackmitm/pkg/monitor"
 	"hackmitm/pkg/plugin"
 	"hackmitm/pkg/proxy"
+	"hackmitm/pkg/storage"
 )
 
 // 版本信息，在构建时通过 ldflags 注入
@@ -146,6 +148,45 @@ func main() {
 		os.Exit(1)
 	}
 
+	// 启动监控服务器
+	var monitorServer *monitor.MonitorServer
+	var sqliteStorage *storage.SQLiteStorage
+	monitoringConfig := cfg.GetMonitoring()
+	if monitoringConfig.Enabled {
+		printInfo("📊 正在启动监控服务器...")
+
+		// 初始化 SQLite 存储
+		dataDir := filepath.Join(filepath.Dir(*configFile), "data")
+		var storageErr error
+		sqliteStorage, storageErr = storage.NewSQLiteStorage(dataDir)
+		if storageErr != nil {
+			printWarning("⚠️  初始化SQLite存储失败: %v，将仅使用内存存储", storageErr)
+		} else {
+			printSuccess("✅ SQLite存储初始化成功: %s", filepath.Join(dataDir, "hackmitm.db"))
+			// 设置全局存储，供流量记录使用
+			monitor.SetGlobalStorage(sqliteStorage)
+		}
+
+		// 创建指标收集器
+		metrics := monitor.NewMetrics()
+
+		// 将代理服务器设置为统计信息提供者
+		metrics.SetProxyStatsProvider(server)
+
+		// 创建健康检查器
+		healthChecker := monitor.NewHealthChecker()
+		healthChecker.AddCheck(monitor.NewMemoryCheck(512))
+		healthChecker.AddCheck(monitor.NewGoroutineCheck(10000))
+
+		// 创建并启动监控服务器
+		monitorServer = monitor.NewMonitorServer(monitoringConfig.Port, metrics, healthChecker, sqliteStorage)
+		if err := monitorServer.Start(); err != nil {
+			printWarning("⚠️  启动监控服务器失败: %v", err)
+		} else {
+			printSuccess("✅ 监控服务器启动成功")
+		}
+	}
+
 	// 显示启动成功信息
 	printSeparator()
 	printSuccess("🎉 HackMITM 代理服务器启动成功!")
@@ -158,7 +199,7 @@ func main() {
 	printSeparator()
 
 	// 等待中断信号
-	waitForShutdown(ctx, server)
+	waitForShutdown(ctx, server, monitorServer)
 
 	printSuccess("👋 HackMITM 已安全退出")
 }
@@ -367,7 +408,7 @@ func loadPlugins(server *proxy.Server, cfg *config.Config) error {
 }
 
 // waitForShutdown 等待关闭信号并优雅关闭
-func waitForShutdown(ctx context.Context, server *proxy.Server) {
+func waitForShutdown(ctx context.Context, server *proxy.Server, monitorServer *monitor.MonitorServer) {
 	// 创建信号通道
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
@@ -383,6 +424,16 @@ func waitForShutdown(ctx context.Context, server *proxy.Server) {
 	// 创建关闭超时上下文
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
+	// 关闭监控服务器
+	if monitorServer != nil {
+		printInfo("🛑 正在关闭监控服务器...")
+		if err := monitorServer.Stop(); err != nil {
+			printError("❌ 关闭监控服务器时出错: %v", err)
+		} else {
+			printSuccess("✅ 监控服务器已关闭")
+		}
+	}
 
 	// 优雅关闭服务器
 	printInfo("🛑 正在关闭代理服务器...")
@@ -533,7 +584,7 @@ func runMainProgram() error {
 	}
 
 	// 等待中断信号
-	waitForShutdown(ctx, server)
+	waitForShutdown(ctx, server, nil)
 
 	printSuccess("👋 HackMITM 已安全退出")
 	return nil

@@ -1,0 +1,45 @@
+# Path Traversal Detection Rule
+id: path-traversal
+name: 路径遍历
+description: 检测目录遍历攻击尝试
+severity: high
+enabled: true
+priority: 85
+tags:
+  - injection
+  - file-inclusion
+  - owasp-top10
+matchers:
+  - part: url
+    type: regex
+    patterns:
+      - "\\.\\.[\\\\/]"
+      - "\\.\\.%2[fF]"
+      - "\\.\\.%5[cC]"
+      - "%2[eE]%2[eE][\\\\/]"
+      - "%2[eE]%2[eE]%2[fF]"
+      - "\\.\\./\\.\\./"
+      - "\\.\\.\\\\\\.\\.\\\\"
+      - "/etc/passwd"
+      - "/etc/shadow"
+      - "c:\\\\windows"
+      - "c:/windows"
+      - "/proc/self"
+      - "/var/log"
+  - part: params
+    type: regex
+    patterns:
+      - "\\.\\.[\\\\/]"
+      - "\\.\\.%2[fF]"
+      - "\\.\\.%5[cC]"
+      - "(?i)(file|path|page|include|template)\\s*[=:]\\s*[\"']?\\.\\."
+condition: or
+remediation: |
+  1. 避免将用户输入直接传递给文件系统操作
+  2. 使用白名单验证允许访问的文件
+  3. 使用安全的文件访问 API，如 os.Open 的安全版本
+  4. 规范化路径后再验证
+  5. 使用 chroot 或容器化限制文件系统访问范围
+references:
+  - https://owasp.org/www-community/attacks/Path_Traversal
+  - https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html

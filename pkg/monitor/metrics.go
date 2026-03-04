@@ -11,8 +11,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"hackmitm/pkg/api"
 	"hackmitm/pkg/logger"
 	"hackmitm/pkg/pool"
+	"hackmitm/pkg/report"
+	"hackmitm/pkg/storage"
+	"hackmitm/pkg/websocket"
 )
 
 // ProxyStatsProvider 代理服务器统计信息提供者接口
@@ -80,6 +84,9 @@ type MonitorServer struct {
 	healthChecker *HealthChecker
 	server        *http.Server
 	port          int
+	storage       *storage.SQLiteStorage // 数据库存储
+	ruleDir       string                 // 规则目录
+	wsServer      *websocket.Server      // WebSocket 服务器
 }
 
 // NewMetrics 创建指标收集器
@@ -100,12 +107,19 @@ func NewHealthChecker() *HealthChecker {
 }
 
 // NewMonitorServer 创建监控服务器
-func NewMonitorServer(port int, metrics *Metrics, healthChecker *HealthChecker) *MonitorServer {
+func NewMonitorServer(port int, metrics *Metrics, healthChecker *HealthChecker, store *storage.SQLiteStorage) *MonitorServer {
 	return &MonitorServer{
 		metrics:       metrics,
 		healthChecker: healthChecker,
 		port:          port,
+		storage:       store,
+		ruleDir:       "configs/rules", // 默认规则目录
 	}
+}
+
+// SetRuleDir 设置规则目录
+func (ms *MonitorServer) SetRuleDir(dir string) {
+	ms.ruleDir = dir
 }
 
 // RecordRequest 记录请求
@@ -284,7 +298,11 @@ func (hc *HealthChecker) CheckHealth() HealthStatus {
 func (ms *MonitorServer) Start() error {
 	mux := http.NewServeMux()
 
-	// 注册路由
+	// 初始化 WebSocket 服务器
+	ms.wsServer = websocket.NewServer(nil)
+	ms.wsServer.Start()
+
+	// 注册基础路由
 	mux.HandleFunc("/metrics", ms.handleMetrics)
 	mux.HandleFunc("/health", ms.handleHealth)
 	mux.HandleFunc("/status", ms.handleStatus)
@@ -293,6 +311,38 @@ func (ms *MonitorServer) Start() error {
 	mux.HandleFunc("/fingerprint", ms.handleFingerprint)
 	mux.HandleFunc("/fingerprint/stats", ms.handleFingerprintStats)
 	mux.HandleFunc("/fingerprint/identify", ms.handleFingerprintIdentify)
+
+	// 添加流量API路由
+	mux.HandleFunc("/api/traffic", ms.handleTraffic)
+	mux.HandleFunc("/api/traffic/clear", ms.handleTrafficClear)
+	mux.HandleFunc("/api/traffic/history", ms.handleTrafficHistory)
+	mux.HandleFunc("/api/traffic/stats", ms.handleTrafficStats)
+
+	// 添加指纹历史API路由
+	mux.HandleFunc("/api/fingerprint/history", ms.handleFingerprintHistory)
+
+	// 注册 WebSocket 路由
+	mux.HandleFunc("/ws", ms.wsServer.HandleWebSocket)
+
+	// 注册扫描规则 API
+	if ms.storage != nil {
+		scannerAPI := api.NewScannerAPI(ms.ruleDir)
+		scannerAPI.RegisterRoutes(mux)
+
+		// 注册漏洞 API
+		vulnAPI := api.NewVulnAPI(ms.storage)
+		vulnAPI.RegisterRoutes(mux)
+
+		// 注册会话 API
+		sessionAPI := api.NewSessionAPI(ms.storage)
+		sessionAPI.RegisterRoutes(mux)
+
+		// 注册报告 API
+		reportAPI := report.NewReportAPI(ms.storage)
+		reportAPI.RegisterRoutes(mux)
+
+		logger.Info("扫描规则、漏洞、会话、报告 API 已注册")
+	}
 
 	ms.server = &http.Server{
 		Addr:    fmt.Sprintf(":%d", ms.port),
@@ -601,4 +651,169 @@ func (bpc *BufferPoolCheck) Check() error {
 	}
 
 	return nil
+}
+
+// handleTraffic 处理流量列表请求
+func (ms *MonitorServer) handleTraffic(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	// 获取limit参数
+	limit := 1000
+	if l := r.URL.Query().Get("limit"); l != "" {
+		fmt.Sscanf(l, "%d", &limit)
+	}
+
+	entries := GlobalTrafficStore.GetEntries(limit)
+	json.NewEncoder(w).Encode(entries)
+}
+
+// handleTrafficClear 处理清空流量请求
+func (ms *MonitorServer) handleTrafficClear(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method != http.MethodDelete {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// 清空内存存储
+	GlobalTrafficStore.Clear()
+
+	// 清空数据库存储
+	if ms.storage != nil {
+		if err := ms.storage.ClearTraffic(); err != nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": false,
+				"message": fmt.Sprintf("Failed to clear database: %v", err),
+			})
+			return
+		}
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Traffic cleared",
+	})
+}
+
+// handleTrafficHistory 处理历史流量请求（从数据库获取）
+func (ms *MonitorServer) handleTrafficHistory(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if ms.storage == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "Database storage not available",
+		})
+		return
+	}
+
+	// 获取分页参数
+	limit := 100
+	offset := 0
+	if l := r.URL.Query().Get("limit"); l != "" {
+		fmt.Sscanf(l, "%d", &limit)
+	}
+	if o := r.URL.Query().Get("offset"); o != "" {
+		fmt.Sscanf(o, "%d", &offset)
+	}
+
+	records, err := ms.storage.GetTraffic(limit, offset)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": fmt.Sprintf("Failed to get traffic: %v", err),
+		})
+		return
+	}
+
+	// 转换为前端友好的格式
+	entries := make([]map[string]interface{}, len(records))
+	for i, r := range records {
+		entries[i] = map[string]interface{}{
+			"id":           r.ID,
+			"timestamp":    r.Timestamp.Format("2006-01-02 15:04:05"),
+			"method":       r.Method,
+			"url":          r.URL,
+			"host":         r.Host,
+			"path":         r.Path,
+			"statusCode":   r.StatusCode,
+			"contentType":  r.ContentType,
+			"requestSize":  r.RequestSize,
+			"responseSize": r.ResponseSize,
+			"duration":     r.Duration,
+			"clientIP":     r.ClientIP,
+			"protocol":     r.Protocol,
+			"fingerprint":  r.Fingerprint,
+		}
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"entries": entries,
+		"limit":   limit,
+		"offset":  offset,
+		"count":   len(entries),
+	})
+}
+
+// handleTrafficStats 处理流量统计请求
+func (ms *MonitorServer) handleTrafficStats(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	stats := map[string]interface{}{
+		"memory_count": GlobalTrafficStore.Count(),
+	}
+
+	// 添加数据库统计
+	if ms.storage != nil {
+		count, err := ms.storage.GetTrafficCount()
+		if err == nil {
+			stats["db_count"] = count
+		}
+		stats["db_size"] = ms.storage.GetDBSize()
+		stats["db_path"] = ms.storage.GetDBPath()
+	}
+
+	json.NewEncoder(w).Encode(stats)
+}
+
+// handleFingerprintHistory 处理指纹识别历史请求
+func (ms *MonitorServer) handleFingerprintHistory(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if ms.storage == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "Database storage not available",
+		})
+		return
+	}
+
+	// 获取limit参数
+	limit := 100
+	if l := r.URL.Query().Get("limit"); l != "" {
+		fmt.Sscanf(l, "%d", &limit)
+	}
+
+	records, err := ms.storage.GetFingerprintHistory(limit)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": fmt.Sprintf("Failed to get fingerprint history: %v", err),
+		})
+		return
+	}
+
+	// 转换为前端友好的格式
+	entries := make([]map[string]interface{}, len(records))
+	for i, r := range records {
+		entries[i] = map[string]interface{}{
+			"id":          r.ID,
+			"url":         r.URL,
+			"timestamp":   r.Timestamp.Format("2006-01-02 15:04:05"),
+			"fingerprint": r.Fingerprint,
+			"confidence":  r.Confidence,
+			"title":       r.Title,
+			"statusCode":  r.StatusCode,
+			"processTime": r.ProcessTime,
+		}
+	}
+
+	json.NewEncoder(w).Encode(entries)
 }

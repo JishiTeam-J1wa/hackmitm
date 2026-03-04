@@ -1,0 +1,43 @@
+# SQL Injection Detection Rule
+id: sql-injection
+name: SQL Injection
+description: 检测请求参数中的 SQL 注入尝试
+severity: high
+enabled: true
+priority: 100
+tags:
+  - injection
+  - database
+  - owasp-top10
+matchers:
+  - part: params
+    type: regex
+    patterns:
+      - "(?i)(\\bunion\\b.*\\bselect\\b)"
+      - "(?i)(\\bselect\\b.*\\bfrom\\b.*\\bwhere\\b)"
+      - "(?i)(\\binsert\\b.*\\binto\\b.*\\bvalues\\b)"
+      - "(?i)(\\bdelete\\b.*\\bfrom\\b)"
+      - "(?i)(\\bdrop\\b.*\\b(table|database)\\b)"
+      - "(?i)(\\bupdate\\b.*\\bset\\b)"
+      - "(?i)('\\s*(or|and)\\s*('\\d|\\d+'|true|false|null))"
+      - "(?i)(\\bwaitfor\\b.*\\bdelay\\b)"
+      - "(?i)(\\bbenchmark\\s*\\()"
+      - "(?i)(\\bsleep\\s*\\()"
+      - "(?i)(;\\s*\\bselect\\b)"
+      - "(?i)(--\\s*$|#\\s*$)"
+      - "(?i)('\\s*;)"
+      - "(?i)(\\bexec(ute)?\\s*\\()"
+      - "(?i)(\\bxp_cmdshell\\b)"
+  - part: url
+    type: regex
+    patterns:
+      - "(?i)(\\bunion\\b.*\\bselect\\b)"
+      - "(?i)('\\s*(or|and)\\s*('\\d|\\d+'|true|false|null))"
+remediation: |
+  1. 使用参数化查询或预编译语句
+  2. 对用户输入进行严格的白名单验证
+  3. 使用 ORM 框架避免直接拼接 SQL
+  4. 限制数据库用户权限，遵循最小权限原则
+references:
+  - https://owasp.org/www-community/attacks/SQL_Injection
+  - https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html

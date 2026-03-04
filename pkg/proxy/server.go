@@ -3,13 +3,18 @@
 package proxy
 
 import (
+	"bytes"
+	"compress/flate"
+	"compress/gzip"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -19,10 +24,21 @@ import (
 	"hackmitm/pkg/config"
 	"hackmitm/pkg/fingerprint"
 	"hackmitm/pkg/logger"
+	"hackmitm/pkg/monitor"
 	"hackmitm/pkg/plugin"
 	"hackmitm/pkg/pool"
 	"hackmitm/pkg/security"
 	"hackmitm/pkg/traffic"
+)
+
+// 稳定性配置常量
+const (
+	// MaxResponseBodySize 响应体最大大小 (5MB) - 用于指纹识别
+	MaxResponseBodySize = 5 * 1024 * 1024
+	// MaxRequestBodySize 请求体最大大小 (10MB)
+	MaxRequestBodySize = 10 * 1024 * 1024
+	// MaxConcurrentFingerprints 最大并发指纹识别数量
+	MaxConcurrentFingerprints = 20
 )
 
 // Server 代理服务器
@@ -60,6 +76,10 @@ type Server struct {
 	ctx context.Context
 	// cancel 取消函数
 	cancel context.CancelFunc
+	// fingerprintSem 指纹识别并发信号量
+	fingerprintSem chan struct{}
+	// skipFingerprintExts 跳过指纹识别的扩展名
+	skipFingerprintExts map[string]bool
 }
 
 // NewServer 创建新的代理服务器
@@ -147,6 +167,34 @@ func NewServer(cfg *config.Config, certMgr *cert.CertManager) (*Server, error) {
 	// 创建高效内存池
 	bufferPool := pool.NewBufferPool(nil) // 使用默认大小配置
 
+	// 创建指纹识别并发信号量
+	fingerprintSem := make(chan struct{}, MaxConcurrentFingerprints)
+
+	// 创建跳过指纹识别的扩展名列表（静态资源）
+	skipExts := map[string]bool{
+		".js":    true,
+		".css":   true,
+		".png":   true,
+		".jpg":   true,
+		".jpeg":  true,
+		".gif":   true,
+		".svg":   true,
+		".ico":   true,
+		".woff":  true,
+		".woff2": true,
+		".ttf":   true,
+		".eot":   true,
+		".otf":   true,
+		".mp4":   true,
+		".mp3":   true,
+		".webp":  true,
+		".webm":  true,
+		".pdf":   true,
+		".zip":   true,
+		".gz":    true,
+		".map":   true, // source map
+	}
+
 	server := &Server{
 		config:             cfg,
 		certManager:        certMgr,
@@ -162,6 +210,8 @@ func NewServer(cfg *config.Config, certMgr *cert.CertManager) (*Server, error) {
 		startTime:          time.Now(),
 		ctx:                ctx,
 		cancel:             cancel,
+		fingerprintSem:     fingerprintSem,
+		skipFingerprintExts: skipExts,
 	}
 
 	return server, nil
@@ -569,15 +619,22 @@ func (s *Server) handleHTTPSRequest(w http.ResponseWriter, r *http.Request) {
 	// 读取响应体进行指纹识别
 	var bodyBuffer []byte
 	if s.fingerprintHandler != nil {
-		bodyBuffer = make([]byte, 0, 1024*1024) // 1MB限制
-		teeReader := io.TeeReader(resp.Body, &bodyWriter{&bodyBuffer})
+		bodyBuffer = make([]byte, 0, MaxResponseBodySize)
+		bodyWriter := &bodyWriter{
+			buffer:   &bodyBuffer,
+			maxSize:  MaxResponseBodySize,
+			overflow: false,
+		}
+		teeReader := io.TeeReader(resp.Body, bodyWriter)
 
 		if _, err := io.CopyBuffer(w, teeReader, buffer.Bytes()); err != nil {
 			logger.Errorf("复制HTTPS响应体失败: %v", err)
 		}
 
-		// 执行指纹识别
-		go s.fingerprintHandler.HandleRequest(r, resp, bodyBuffer)
+		// 执行指纹识别（带并发控制和静态资源过滤）
+		if !bodyWriter.isOverflow() {
+			s.runFingerprintAsync(r, resp, bodyBuffer)
+		}
 	} else {
 		if _, err := io.CopyBuffer(w, resp.Body, buffer.Bytes()); err != nil {
 			logger.Errorf("复制HTTPS响应体失败: %v", err)
@@ -671,38 +728,213 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	// 读取响应体进行指纹识别
 	var bodyBuffer []byte
 	if s.fingerprintHandler != nil {
-		bodyBuffer = make([]byte, 0, 1024*1024) // 1MB限制
-		teeReader := io.TeeReader(resp.Body, &bodyWriter{&bodyBuffer})
+		bodyBuffer = make([]byte, 0, MaxResponseBodySize)
+		bodyWriter := &bodyWriter{
+			buffer:   &bodyBuffer,
+			maxSize:  MaxResponseBodySize,
+			overflow: false,
+		}
+		teeReader := io.TeeReader(resp.Body, bodyWriter)
 
 		if _, err := io.CopyBuffer(w, teeReader, buffer.Bytes()); err != nil {
 			logger.Errorf("复制HTTP响应体失败: %v", err)
 		}
 
-		// 执行指纹识别
-		go s.fingerprintHandler.HandleRequest(r, resp, bodyBuffer)
+		// 执行指纹识别（带并发控制和静态资源过滤）
+		if !bodyWriter.isOverflow() {
+			s.runFingerprintAsync(r, resp, bodyBuffer)
+		}
 	} else {
-		if _, err := io.CopyBuffer(w, resp.Body, buffer.Bytes()); err != nil {
+		// 仍然需要读取响应体用于记录
+		bodyBuffer = make([]byte, 0, MaxResponseBodySize)
+		bodyWriter := &bodyWriter{
+			buffer:   &bodyBuffer,
+			maxSize:  MaxResponseBodySize,
+			overflow: false,
+		}
+		teeReader := io.TeeReader(resp.Body, bodyWriter)
+		if _, err := io.CopyBuffer(w, teeReader, buffer.Bytes()); err != nil {
 			logger.Errorf("复制HTTP响应体失败: %v", err)
 		}
 	}
+
+	// 记录流量到监控存储（包含请求/响应体）
+	duration := time.Since(startTime).Milliseconds()
+
+	// 读取请求体
+	reqBody := ""
+	if r.Body != nil {
+		reqBodyBytes, _ := io.ReadAll(r.Body)
+		if len(reqBodyBytes) > 0 {
+			if len(reqBodyBytes) > MaxResponseBodySize {
+				reqBody = string(reqBodyBytes[:MaxResponseBodySize])
+			} else {
+				reqBody = string(reqBodyBytes)
+			}
+		}
+	}
+
+	// 转换请求头
+	reqHeaders := make(map[string]string)
+	for name, values := range r.Header {
+		if len(values) > 0 {
+			reqHeaders[name] = values[0]
+		}
+	}
+
+	// 转换响应头
+	respHeaders := make(map[string]string)
+	for name, values := range resp.Header {
+		if len(values) > 0 {
+			respHeaders[name] = values[0]
+		}
+	}
+
+	// 响应体 - 处理压缩编码
+	respBody := ""
+	if len(bodyBuffer) > 0 {
+		// 检测 Content-Encoding 并解压
+		contentEncoding := resp.Header.Get("Content-Encoding")
+		contentType := resp.Header.Get("Content-Type")
+
+		// 判断是否是文本内容
+		isTextContent := strings.Contains(contentType, "text/") ||
+			strings.Contains(contentType, "application/json") ||
+			strings.Contains(contentType, "application/xml") ||
+			strings.Contains(contentType, "application/javascript") ||
+			contentType == ""
+
+		if contentEncoding == "gzip" && isTextContent {
+			// 解压 gzip
+			reader, err := gzip.NewReader(bytes.NewReader(bodyBuffer))
+			if err == nil {
+				decompressed, err := io.ReadAll(reader)
+				reader.Close()
+				if err == nil && len(decompressed) <= MaxResponseBodySize {
+					respBody = string(decompressed)
+					// 移除 Content-Encoding 头，因为内容已解压
+					delete(respHeaders, "Content-Encoding")
+				} else {
+					// 解压失败或太大，使用 base64 编码原始数据
+					respBody = "data:application/octet-stream;base64," + base64.StdEncoding.EncodeToString(bodyBuffer)
+				}
+			} else {
+				respBody = "data:application/octet-stream;base64," + base64.StdEncoding.EncodeToString(bodyBuffer)
+			}
+		} else if contentEncoding == "deflate" && isTextContent {
+			// 解压 deflate
+			reader := flate.NewReader(bytes.NewReader(bodyBuffer))
+			decompressed, err := io.ReadAll(reader)
+			reader.Close()
+			if err == nil && len(decompressed) <= MaxResponseBodySize {
+				respBody = string(decompressed)
+				delete(respHeaders, "Content-Encoding")
+			} else {
+				respBody = "data:application/octet-stream;base64," + base64.StdEncoding.EncodeToString(bodyBuffer)
+			}
+		} else if isTextContent && len(bodyBuffer) <= MaxResponseBodySize {
+			// 未压缩的文本内容
+			respBody = string(bodyBuffer)
+		} else if len(bodyBuffer) <= MaxResponseBodySize {
+			// 二进制内容，使用 base64
+			respBody = "data:application/octet-stream;base64," + base64.StdEncoding.EncodeToString(bodyBuffer)
+		}
+	}
+
+	monitor.AddTrafficWithDetails(
+		r.Method,
+		r.URL.String(),
+		r.Host,
+		r.URL.Path,
+		resp.StatusCode,
+		resp.Header.Get("Content-Type"),
+		r.ContentLength,
+		resp.ContentLength,
+		duration,
+		r.RemoteAddr,
+		r.Proto,
+		reqHeaders,
+		respHeaders,
+		reqBody,
+		respBody,
+		"", // fingerprint
+	)
 }
 
-// bodyWriter 用于收集响应体数据
+// bodyWriter 用于收集响应体数据（带大小限制）
 type bodyWriter struct {
-	buffer *[]byte
+	buffer   *[]byte
+	maxSize  int
+	overflow bool
 }
 
 func (bw *bodyWriter) Write(p []byte) (n int, err error) {
+	if bw.overflow {
+		return len(p), nil // 已溢出，丢弃数据但继续读取
+	}
+
+	newLen := len(*bw.buffer) + len(p)
+	if newLen > bw.maxSize {
+		// 超过限制，标记溢出但仍返回成功以继续传输
+		bw.overflow = true
+		// 只保留最大限制内的数据
+		remaining := bw.maxSize - len(*bw.buffer)
+		if remaining > 0 {
+			*bw.buffer = append(*bw.buffer, p[:remaining]...)
+		}
+		return len(p), nil
+	}
+
 	*bw.buffer = append(*bw.buffer, p...)
 	return len(p), nil
 }
 
+// isOverflow 检查是否溢出
+func (bw *bodyWriter) isOverflow() bool {
+	return bw.overflow
+}
+
+// shouldSkipFingerprint 检查是否应该跳过指纹识别（静态资源）
+func (s *Server) shouldSkipFingerprint(req *http.Request) bool {
+	ext := strings.ToLower(path.Ext(req.URL.Path))
+	return s.skipFingerprintExts[ext]
+}
+
+// runFingerprintAsync 异步执行指纹识别（带并发控制）
+func (s *Server) runFingerprintAsync(req *http.Request, resp *http.Response, bodyBuffer []byte) {
+	// 跳过静态资源
+	if s.shouldSkipFingerprint(req) {
+		logger.Debugf("跳过静态资源指纹识别: %s", req.URL.Path)
+		return
+	}
+
+	// 尝试获取信号量
+	select {
+	case s.fingerprintSem <- struct{}{}:
+		// 成功获取，异步执行
+		go func() {
+			defer func() { <-s.fingerprintSem }()
+			defer func() {
+				if r := recover(); r != nil {
+					logger.Errorf("指纹识别 panic: %v", r)
+				}
+			}()
+			s.fingerprintHandler.HandleRequest(req, resp, bodyBuffer)
+		}()
+	default:
+		// 信号量已满，跳过此请求
+		logger.Debugf("指纹识别队列已满，跳过: %s", req.URL.Path)
+	}
+}
+
 // buildRequestContext 构建请求上下文
 func (s *Server) buildRequestContext(r *http.Request, startTime time.Time) *plugin.RequestContext {
-	// 读取请求体（如果有）
+	// 读取请求体（如果有，带大小限制）
 	var body []byte
 	if r.Body != nil {
-		if data, err := io.ReadAll(r.Body); err == nil {
+		// 使用 LimitReader 限制请求体大小
+		limitedReader := io.LimitReader(r.Body, MaxRequestBodySize)
+		if data, err := io.ReadAll(limitedReader); err == nil {
 			body = data
 			// 重新设置请求体
 			r.Body = io.NopCloser(strings.NewReader(string(data)))
