@@ -1,0 +1,1 @@
+export { FingerprintTab } from './FingerprintTab'

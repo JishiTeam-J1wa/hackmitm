@@ -1,0 +1,518 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* 击势安全团队配色 - 白底主题 */
+    --background: 0 0% 100%;
+    --foreground: 220 30% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 30% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 30% 15%;
+
+    /* 主色 - 深蓝色 */
+    --primary: 215 100% 30%;
+    --primary-foreground: 0 0% 100%;
+
+    /* 次要色 - 浅蓝 */
+    --secondary: 215 60% 95%;
+    --secondary-foreground: 215 100% 30%;
+
+    --muted: 220 15% 96%;
+    --muted-foreground: 220 15% 45%;
+
+    /* 强调色 - 橙色 */
+    --accent: 25 100% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    /* 危险色 */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 15% 90%;
+    --input: 220 15% 90%;
+    --ring: 215 100% 30%;
+
+    --radius: 0.5rem;
+
+    /* 自定义颜色 */
+    --j1shi-blue: 215 100% 30%;     /* #0054A6 深蓝 */
+    --j1shi-blue-light: 215 80% 50%; /* #3D8BD4 亮蓝 */
+    --j1shi-orange: 25 100% 50%;     /* #FF6600 橙色 */
+    --j1shi-orange-light: 25 100% 65%; /* #FF9944 浅橙 */
+  }
+
+  .dark {
+    /* 深色模式 - 仍然可用 */
+    --background: 220 30% 8%;
+    --foreground: 0 0% 98%;
+
+    --card: 220 30% 10%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 220 30% 10%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 215 80% 55%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 20% 20%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 220 20% 18%;
+    --muted-foreground: 220 15% 60%;
+
+    --accent: 25 90% 55%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 70% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 20% 25%;
+    --input: 220 20% 25%;
+    --ring: 215 80% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+  html, body, #root {
+    height: 100%;
+    width: 100%;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-muted;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-muted-foreground/30 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-muted-foreground/50;
+}
+
+/* Monaco editor customization */
+.monaco-editor {
+  font-family: "JetBrains Mono", "Fira Code", Menlo, Monaco, Consolas, monospace !important;
+}
+
+/* Traffic table row colors - 使用蓝橙配色 */
+.row-get {
+  @apply bg-blue-500/10;
+}
+
+.row-post {
+  @apply bg-orange-500/10;
+}
+
+.row-put {
+  @apply bg-amber-500/10;
+}
+
+.row-delete {
+  @apply bg-red-500/10;
+}
+
+.row-error {
+  @apply bg-red-500/20;
+}
+
+/* Status badges - 蓝橙配色 */
+.status-2xx {
+  @apply text-green-600;
+}
+
+.status-3xx {
+  @apply text-blue-600;
+}
+
+.status-4xx {
+  @apply text-orange-500;
+}
+
+.status-5xx {
+  @apply text-red-500;
+}
+
+/* Intercept indicator */
+.intercept-active {
+  @apply animate-pulse text-orange-500;
+}
+
+/* Window drag region for Wails */
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* App container - 白色主题 */
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background: #FFFFFF;
+  color: hsl(var(--foreground));
+}
+
+/* 顶部标签栏 - 白色主题 */
+.top-tabs-bar {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  background: #FFFFFF;
+  border-bottom: 1px solid #E1E5EA;
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+}
+
+.top-tabs-logo {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  height: 100%;
+  border-right: 1px solid #E1E5EA;
+  -webkit-app-region: no-drag;
+}
+
+.top-tabs {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  -webkit-app-region: no-drag;
+}
+
+.top-tab {
+  padding: 0 16px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 500;
+  color: #6B7280;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border-bottom: 2px solid transparent;
+}
+
+.top-tab:hover {
+  color: #374151;
+  background: rgba(0,0,0,0.02);
+}
+
+.top-tab-active {
+  color: hsl(var(--j1shi-blue));
+  background: rgba(0,84,166,0.05);
+  border-bottom-color: hsl(var(--j1shi-orange));
+}
+
+.top-tabs-right {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 8px;
+  -webkit-app-region: no-drag;
+}
+
+/* 主内容区 */
+.main-content-area {
+  flex: 1;
+  overflow: hidden;
+  background: #F8FAFB;
+}
+
+/* 子标签页样式 - 用于 Proxy 等模块内部 */
+.sub-tabs-bar {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  background: #FFFFFF;
+  border-bottom: 1px solid #E1E5EA;
+  flex-shrink: 0;
+  padding: 0 8px;
+}
+
+.sub-tab {
+  padding: 0 12px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 500;
+  color: #666;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border-bottom: 2px solid transparent;
+}
+
+.sub-tab:hover {
+  color: #333;
+  background: rgba(0,0,0,0.02);
+}
+
+.sub-tab-active {
+  color: hsl(var(--j1shi-blue));
+  border-bottom-color: hsl(var(--j1shi-blue));
+}
+
+/* API 连接状态面板 - 白色背景适配 */
+.api-connection-panel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  height: 100%;
+}
+
+.api-status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: rgba(0,0,0,0.03);
+  color: #4B5563;
+}
+
+.api-status-connected {
+  background: rgba(34, 197, 94, 0.1);
+  color: #16a34a;
+}
+
+.api-status-disconnected {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+}
+
+/* 保留旧样式以兼容 */
+.main-layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.content-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #FFFFFF;
+}
+
+/* Header - 紧凑型 */
+.content-header {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: transparent;
+  flex-shrink: 0;
+}
+
+/* Main content */
+.content-main {
+  flex: 1;
+  overflow: hidden;
+  background: #F8FAFB;
+}
+
+/* Status bar - 白色背景 */
+.status-bar {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  font-size: 11px;
+  color: #4B5563;
+  background: #FFFFFF;
+  border-top: 1px solid #E1E5EA;
+  flex-shrink: 0;
+}
+
+.status-bar-item {
+  margin-right: 16px;
+}
+
+.status-bar-spacer {
+  flex: 1;
+}
+
+/* 按钮样式 - 蓝橙配色 */
+.btn-primary {
+  background: hsl(var(--j1shi-blue));
+  color: white;
+}
+
+.btn-primary:hover {
+  background: hsl(var(--j1shi-blue-light));
+}
+
+.btn-accent {
+  background: hsl(var(--j1shi-orange));
+  color: white;
+}
+
+.btn-accent:hover {
+  background: hsl(var(--j1shi-orange-light));
+}
+
+/* 指标卡片样式 */
+.metric-card {
+  background: white;
+  border: 1px solid #E1E5EA;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.metric-card-icon-blue {
+  background: hsl(var(--j1shi-blue) / 0.1);
+  color: hsl(var(--j1shi-blue));
+}
+
+.metric-card-icon-orange {
+  background: hsl(var(--j1shi-orange) / 0.1);
+  color: hsl(var(--j1shi-orange));
+}
+
+/* Message Viewer 组件样式 - Burp 风格 */
+.message-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+}
+
+.message-viewer-header {
+  height: 24px;
+  background: #E5E7EB;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  flex-shrink: 0;
+  border-bottom: 1px solid #D1D5DB;
+}
+
+.message-viewer-content {
+  flex: 1;
+  overflow: auto;
+  padding: 8px;
+  font-family: "JetBrains Mono", "Fira Code", Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  background: #F9FAFB;
+  color: #1F2937;
+  line-height: 1.5;
+}
+
+.message-viewer-content pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.message-viewer-search {
+  height: 24px;
+  background: #F3F4F6;
+  border-top: 1px solid #E5E7EB;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  flex-shrink: 0;
+}
+
+/* 搜索高亮样式 */
+.search-match {
+  background-color: #FEF08A;
+  color: #000;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+.search-match-current {
+  background-color: #F97316;
+  color: #FFF;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+/* Hex 视图样式 */
+.hex-view {
+  font-family: "JetBrains Mono", "Fira Code", Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre;
+}
+
+.hex-view-offset {
+  color: #6B7280;
+}
+
+.hex-view-hex {
+  color: #1F2937;
+}
+
+.hex-view-ascii {
+  color: #059669;
+}
+
+/* JSON 语法高亮 */
+.json-key {
+  color: #7C3AED;
+}
+
+.json-string {
+  color: #059669;
+}
+
+.json-number {
+  color: #DC2626;
+}
+
+.json-boolean {
+  color: #2563EB;
+}
+
+.json-null {
+  color: #6B7280;
+}
+
+/* Render iframe */
+.message-viewer-content iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #FFF;
+}

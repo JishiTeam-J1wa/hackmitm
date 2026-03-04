@@ -1,0 +1,13 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "hackmitm-desktop",
+  "outputfilename": "hackmitm-desktop",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "击势安全团队",
+    "email": "54792624+JishiTeam-J1wa@users.noreply.github.com"
+  }
+}

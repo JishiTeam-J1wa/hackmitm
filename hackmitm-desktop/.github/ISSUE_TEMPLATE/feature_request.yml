@@ -1,0 +1,130 @@
+name: ✨ Feature Request
+description: 建议一个新功能或改进
+title: "[Feature] "
+labels: ["enhancement", "需要分类"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢您的功能建议！🚀 我们重视每一个改进建议。
+
+  - type: textarea
+    id: feature-description
+    attributes:
+      label: ✨ 功能描述
+      description: 清楚简洁地描述您希望的功能
+      placeholder: 我希望能够...
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem-statement
+    attributes:
+      label: 🎯 问题陈述
+      description: 描述您遇到的问题或需求
+      placeholder: |
+        目前我遇到的问题是...
+        这个功能可以帮助我...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: 💡 建议的解决方案
+      description: 描述您希望如何实现这个功能
+      placeholder: 我认为可以通过...来实现
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 🔄 替代方案
+      description: 描述您考虑过的其他解决方案
+      placeholder: 我也考虑过...
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 📊 优先级
+      description: 这个功能对您有多重要？
+      options:
+        - 低 - 有了更好
+        - 中 - 比较重要
+        - 高 - 很重要
+        - 紧急 - 必须有
+    validations:
+      required: true
+
+  - type: dropdown
+    id: complexity
+    attributes:
+      label: 🔧 预估复杂度
+      description: 您认为实现这个功能的复杂度如何？
+      options:
+        - 简单 - 几小时
+        - 中等 - 几天
+        - 复杂 - 几周
+        - 很复杂 - 几个月
+        - 不确定
+
+  - type: textarea
+    id: use-cases
+    attributes:
+      label: 🎯 使用场景
+      description: 描述这个功能的具体使用场景
+      placeholder: |
+        场景1: 当我...时，我需要...
+        场景2: 在...情况下，这个功能可以...
+    validations:
+      required: true
+
+  - type: textarea
+    id: mockups
+    attributes:
+      label: 🎨 界面设计/API设计
+      description: 如果涉及界面或API，请描述您的设计想法
+      placeholder: |
+        配置示例:
+        ```json
+        {
+          "new_feature": {
+            "enabled": true,
+            "option": "value"
+          }
+        }
+        ```
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: 📎 其他信息
+      description: 添加任何其他相关信息、截图或参考资料
+      placeholder: 其他相关信息...
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: 🤝 贡献意愿
+      description: 您是否愿意参与实现这个功能？
+      options:
+        - label: 我愿意提交PR来实现这个功能
+        - label: 我可以帮助测试这个功能
+        - label: 我可以帮助编写文档
+        - label: 我可以提供技术建议
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: ✅ 确认
+      description: 在提交之前，请确认以下内容
+      options:
+        - label: 我已经搜索了现有的issues，确认这不是重复请求
+          required: true
+        - label: 我已经阅读了项目路线图
+          required: true
+        - label: 这个功能符合项目的目标和范围
+          required: true 

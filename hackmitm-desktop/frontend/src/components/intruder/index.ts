@@ -1,0 +1,1 @@
+export { IntruderTab } from './IntruderTab'

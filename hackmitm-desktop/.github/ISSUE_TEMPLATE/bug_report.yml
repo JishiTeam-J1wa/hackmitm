@@ -1,0 +1,101 @@
+name: 🐛 Bug Report
+description: 报告一个bug来帮助我们改进
+title: "[Bug] "
+labels: ["bug", "需要分类"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢您花时间填写这个bug报告！🙏
+
+  - type: textarea
+    id: bug-description
+    attributes:
+      label: 🐛 Bug描述
+      description: 请清楚简洁地描述这个bug
+      placeholder: 描述发生了什么...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction-steps
+    attributes:
+      label: 🔄 复现步骤
+      description: 详细描述如何复现这个问题
+      placeholder: |
+        1. 执行命令 '...'
+        2. 配置文件设置 '...'
+        3. 发送请求到 '...'
+        4. 看到错误
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: ✅ 期望行为
+      description: 描述您期望发生什么
+      placeholder: 应该发生什么...
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: ❌ 实际行为
+      description: 描述实际发生了什么
+      placeholder: 实际发生了什么...
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 🌍 环境信息
+      description: 请提供您的环境信息
+      value: |
+        - OS: [例如: Ubuntu 20.04, macOS 12.0, Windows 11]
+        - Go版本: [例如: 1.21.0]
+        - HackMITM版本: [例如: v1.0.0]
+        - 架构: [例如: amd64, arm64]
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 📋 日志信息
+      description: 请提供相关的日志输出
+      placeholder: 粘贴日志内容...
+      render: shell
+
+  - type: textarea
+    id: config
+    attributes:
+      label: ⚙️ 配置文件
+      description: 请提供相关的配置文件内容（请移除敏感信息）
+      placeholder: 粘贴配置内容...
+      render: json
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: 📎 其他信息
+      description: 添加任何其他有助于解决问题的信息
+      placeholder: 其他相关信息...
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: ✅ 确认
+      description: 在提交之前，请确认以下内容
+      options:
+        - label: 我已经搜索了现有的issues，确认这不是重复报告
+          required: true
+        - label: 我已经阅读了文档和FAQ
+          required: true
+        - label: 我提供了足够的信息来复现这个问题
+          required: true 

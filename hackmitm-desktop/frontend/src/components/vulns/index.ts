@@ -1,0 +1,1 @@
+export { VulnsTab } from './VulnsTab'
